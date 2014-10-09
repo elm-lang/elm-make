@@ -8,7 +8,8 @@ import qualified Elm.Compiler.Module as Module
 data Update
     = Progress Float
     | Completion Module.Name
-    | Done
+    | Success
+    | Error
 
 
 display :: Chan.Chan Update -> Float -> IO ()
@@ -25,8 +26,11 @@ display updates progress =
             do  putStrLn $ "Done with " ++ Module.nameToString name
                 display updates progress
 
-        Done ->
-            putStrLn "Succes!"
+        Success ->
+            putStrLn "Success!"
+
+        Error ->
+            putStrLn "Error!"
 
 
 -- PROGRESS BAR
