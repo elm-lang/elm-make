@@ -1,9 +1,9 @@
 module CommandLine.Display where
 
 import qualified Control.Concurrent.Chan as Chan
-import System.IO (hFlush, stdout)
+import System.Exit (exitFailure)
+import System.IO (hFlush, hPutStrLn, stderr, stdout)
 import qualified Elm.Compiler.Module as Module
-
 
 data Update
     = Progress Float
@@ -30,7 +30,8 @@ display updates progress =
             putStrLn "Success!"
 
         Error ->
-            putStrLn "Error!"
+            do  hPutStrLn stderr "Error!"
+                exitFailure
 
 
 -- PROGRESS BAR
