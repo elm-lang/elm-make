@@ -9,8 +9,8 @@ import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import qualified Data.Set as Set
 
+import qualified Build.Display as Display
 import qualified Build.Queue as Queue
-import qualified CommandLine.Display as Display
 import qualified Crawl.Locations as Locations
 import qualified Elm.Compiler.Module as Module
 
@@ -47,6 +47,13 @@ numIncompleteTasks state =
 data Result
     = Error
     | Success Module.Name ModuleInterface ThreadId
+
+
+build :: IO ()
+build =
+  do  displayChan <- Chan.newChan
+      Display.display displayChan 0
+      buildManager (error "env") (error "state")
 
 
 buildManager :: Env -> State -> IO ()

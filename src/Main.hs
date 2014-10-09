@@ -6,7 +6,7 @@ import GHC.Conc (getNumProcessors, setNumCapabilities)
 
 import Build
 import Crawl
-import qualified CommandLine.Display as Display
+import qualified Build.Display as Display
 import qualified Elm.Compiler.Module as Module
 
 

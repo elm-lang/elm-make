@@ -1,4 +1,4 @@
-module CommandLine.Display where
+module Build.Display where
 
 import qualified Control.Concurrent.Chan as Chan
 import System.Exit (exitFailure)
