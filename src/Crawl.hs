@@ -1,8 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Crawl where
 
-import Control.Arrow (second)
-import Control.Monad (forM)
 import Control.Monad.Error (MonadError, MonadIO, liftIO, throwError)
 import qualified Data.Graph as Graph
 import qualified Data.List as List
@@ -10,15 +8,10 @@ import qualified Data.Map as Map
 
 import qualified Crawl.Local as Local
 import qualified Crawl.Locations as Locations
-import qualified Crawl.Packages as Pkg
-import qualified Crawl.Validate as Validate
 import qualified Elm.Compiler as Compiler
 import qualified Elm.Compiler.Module as Module
 import qualified Elm.Package.Description as Desc
-import qualified Elm.Package.Name as N
 import qualified Elm.Package.Paths as Path
-import qualified Elm.Package.Solution as Solution
-import qualified Elm.Package.Version as V
 
 
 type Graph =

@@ -1,9 +1,9 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Crawl.Packages where
 
-import Control.Monad.Error (MonadError, MonadIO, liftIO)
+import Control.Monad.Error (MonadError, MonadIO)
 import qualified Data.Map as Map
-import System.FilePath ((</>), (<.>))
+import System.FilePath ((</>))
 
 import qualified Crawl.Utils as Crawl
 import qualified Elm.Compiler.Module as Module

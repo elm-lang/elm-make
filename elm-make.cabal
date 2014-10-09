@@ -31,7 +31,7 @@ source-repository head
 Executable elm-make
 
     ghc-options: 
-        -threaded -O2
+        -threaded -O2 -W
 
     hs-source-dirs:
         src
