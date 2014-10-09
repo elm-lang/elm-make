@@ -1,67 +1,103 @@
 module Build where
 
+import Control.Concurrent (ThreadId, myThreadId, forkIO, killThread)
 import qualified Control.Concurrent.Chan as Chan
+import Control.Monad (forM)
+import qualified Data.List as List
 import Data.Map ((!))
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
+import qualified Data.Set as Set
 
 import qualified Build.Queue as Queue
+import qualified CommandLine.Display as Display
 import qualified Crawl.Locations as Locations
+import qualified Elm.Compiler.Module as Module
 
-
-type WaitingModules =
-    Map.Map Module.Name ([Module.Name], [Module.Interface])
-
-data CurrentState = Wait | Update
-
-data State = State
-    { currentState :: CurrentState
-    , numActiveThreads :: Int
-    , readyQueue :: Queue.Queue
-    , waitingModules :: WaitingModules
-    }
 
 data Env = Env
     { maxActiveThreads :: Int
-    , completions :: Chan.Chan (Module.Name, Module.Interface)
+    , numTasks :: Int
+    , resultChan :: Chan.Chan Result
+    , displayChan :: Chan.Chan Display.Update
     , locations :: Locations.Locations
     , freeMap :: Map.Map Module.Name [Module.Name]
     }
+
+data State = State
+    { currentState :: CurrentState
+    , activeThreads :: Set.Set ThreadId
+    , readyQueue :: Queue.Queue (Module.Name, [ModuleInterface])
+    , waitingModules :: WaitingModules
+    }
+
+data ModuleInterface = TODO_IMPLEMENT_ME
+
+type WaitingModules =
+    Map.Map Module.Name ([Module.Name], [ModuleInterface])
+
+data CurrentState = Wait | Update
+
+numIncompleteTasks :: State -> Int
+numIncompleteTasks state =
+    Set.size (activeThreads state)
+    + Queue.size (readyQueue state)
+    + Map.size (waitingModules state)
+
+data Result
+    = Error
+    | Success Module.Name ModuleInterface ThreadId
 
 
 buildManager :: Env -> State -> IO ()
 buildManager env state =
   case currentState state of
+    _ | numIncompleteTasks state == 0 ->
+          Chan.writeChan (displayChan env) Display.Success
+
     Wait ->
-      do  (name, interface) <- Chan.readChan (completions state)
-          buildManager env (registerCompletion env state name interface)
+      do  result <- Chan.readChan (resultChan env)
+          case result of
+            Success name interface threadId ->
+              do  Chan.writeChan (displayChan env) (Display.Completion name)
+                  buildManager env (registerSuccess env state name interface threadId)
+            Error ->
+              do  mapM killThread (Set.toList (activeThreads state))
+                  Chan.writeChan (displayChan env) Display.Error
 
     Update ->
-      do  forM runNow $ \name ->
-              forkIO (buildModule (completions env) (locations env) name)
+      do  threadIds <-
+              forM runNow $ \(name, interfaces) ->
+                  forkIO (buildModule (resultChan env) (locations env) name interfaces)
+          Chan.writeChan (displayChan env) (Display.Progress progress)
           buildManager env $
               state
-              { numActiveThreads = numActiveThreads state + length runNow
+              { activeThreads = foldr Set.insert (activeThreads state) threadIds
               , readyQueue = runLater
               }
       where
         (runNow, runLater) =
-            Queue.dequeue (maxActiveThreads env - numActiveThreads state) queue
+            Queue.dequeue
+                (maxActiveThreads env - Set.size (activeThreads state))
+                (readyQueue state)
+
+        progress =
+            fromIntegral (numIncompleteTasks state) / fromIntegral (numTasks env)
     
 
--- WAIT - REGISTER COMPLETIONS
+-- WAIT - REGISTER RESULTS
 
-registerCompletion :: Env -> State -> Module.Name -> Module.Interface -> State
-registerCompletion env state name interface =
+registerSuccess :: Env -> State -> Module.Name -> ModuleInterface -> ThreadId -> State
+registerSuccess env state name interface threadId =
     state
-    { state = Update
-    , numActiveThreads = numActiveThreads state - 1
-    , waiting = waitingModule
+    { currentState = Update
+    , activeThreads = Set.delete threadId (activeThreads state)
+    , waitingModules = updatedWaitingModules
     , readyQueue = Queue.enqueue (Maybe.catMaybes readyModules) (readyQueue state)
     }
   where
-    (waitingModule, readyModules) =
-        mapAccumR
+    (updatedWaitingModules, readyModules) =
+        List.mapAccumR
             (updateWaitingModules name interface)
             (waitingModules state)
             (freeMap env ! name)
@@ -69,10 +105,10 @@ registerCompletion env state name interface =
 
 updateWaitingModules
     :: Module.Name
-    -> Module.Interface
+    -> ModuleInterface
     -> WaitingModules
     -> Module.Name
-    -> (WaitingModules, Maybe (Module.Name, [Module.Interface]))
+    -> (WaitingModules, Maybe (Module.Name, [ModuleInterface]))
 updateWaitingModules name interface waitingModules potentiallyFreedModule =
   case Map.lookup potentiallyFreedModule waitingModules of
     Nothing ->
@@ -88,7 +124,7 @@ updateWaitingModules name interface waitingModules potentiallyFreedModule =
           updatedBlockingModules ->
               ( updatedWaitingModules, Nothing )
             where
-              updatedWaitingModules
+              updatedWaitingModules =
                   Map.insert
                       potentiallyFreedModule
                       (updatedBlockingModules, interface : interfaces)
@@ -97,7 +133,8 @@ updateWaitingModules name interface waitingModules potentiallyFreedModule =
 
 -- UPDATE - BUILD SOME MODULES
 
-buildModule :: Chan.Chan Module.Name -> Locations.Locations -> Module.Name -> IO ()
-buildModule completionChan locations moduleName =
-    do  (error "not sure how to build yet") moduleName
-        Chan.writeChan completionChan moduleName
+buildModule :: Chan.Chan Result -> Locations.Locations -> Module.Name -> [ModuleInterface] -> IO ()
+buildModule completionChan locations moduleName interfaces =
+    do  interface <- (error "not sure how to build yet") moduleName
+        threadId <- myThreadId
+        Chan.writeChan completionChan (Success moduleName interface threadId)
