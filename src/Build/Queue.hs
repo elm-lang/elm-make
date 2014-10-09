@@ -1,23 +1,26 @@
 module Build.Queue where
 
-import qualified Elm.Compiler.Module as Module
+
+newtype Queue a =
+    Queue ([a], [a])
 
 
-newtype Queue =
-    Queue ([Module.Name], [Module.Name])
-
-
-empty : Queue
+empty :: Queue a
 empty =
     Queue ([],[])
 
 
-enqueue : [Module.Name] -> Queue -> Queue
+size :: Queue a -> Int
+size (Queue (front, back)) =
+    length front + length back
+
+
+enqueue :: [a] -> Queue a -> Queue a
 enqueue names (Queue (front, back)) =
     Queue (front, names ++ back)
 
 
-dequeue : Int -> Queue -> ([Module.Name], Queue)
+dequeue :: Int -> Queue a -> ([a], Queue a)
 dequeue n (Queue (front, back)) =
     case splitAt n front of
         (names, []) ->
