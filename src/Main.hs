@@ -4,6 +4,7 @@ import Control.Concurrent (forkIO, threadDelay)
 import qualified Control.Concurrent.Chan as Chan
 import GHC.Conc (getNumProcessors, setNumCapabilities)
 
+import Build
 import Crawl
 import qualified CommandLine.Display as Display
 import qualified Elm.Compiler.Module as Module
@@ -25,7 +26,7 @@ updateSequence =
     , Display.Completion (Module.Name ["CommandLine", "Display"])
     , Display.Progress 0.5
     , Display.Progress 1
-    , Display.Done
+    , Display.Success
     ]
 
 
