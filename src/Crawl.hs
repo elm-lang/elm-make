@@ -3,7 +3,9 @@ module Crawl where
 
 import Control.Arrow (second)
 import Control.Monad (forM)
-import Control.Monad.Error (MonadError, MonadIO, liftIO)
+import Control.Monad.Error (MonadError, MonadIO, liftIO, throwError)
+import qualified Data.Graph as Graph
+import qualified Data.List as List
 import qualified Data.Map as Map
 
 import qualified Crawl.Local as Local
@@ -34,7 +36,12 @@ crawl =
 
       initialLocations <- Locations.initialize (zip exposedModules locals)
 
-      depthFirstSearch sourceDirs initialLocations Map.empty exposedModules
+      (locations, dependencyNodes) <-
+          depthFirstSearch sourceDirs initialLocations Map.empty exposedModules
+
+      checkForCycles dependencyNodes
+
+      return (locations, dependencyNodes)
 
 
 -- DEPTH FIRST SEARCH
@@ -78,3 +85,35 @@ depthFirstSearch sourceDirs locations dependencyNodes (moduleName:unvisited) =
                 updatedLocations
                 (Map.insert moduleName deps dependencyNodes)
                 (unvisited ++ newUnvisited)
+
+
+-- CHECK FOR CYCLES
+
+checkForCycles :: (MonadError String m) => Graph -> m ()
+checkForCycles dependencyNodes =
+    mapM_ errorOnCycle components
+  where
+    components =
+        Graph.stronglyConnComp (map toNode (Map.toList dependencyNodes))
+
+    toNode (name, deps) =
+        (name, name, deps)
+
+    errorOnCycle scc =
+        case scc of
+          Graph.AcyclicSCC _ -> return ()
+          Graph.CyclicSCC cycle ->
+              throwError $
+              "Your dependencies for a cycle:\n\n"
+              ++ showCycle dependencyNodes cycle
+              ++ "\nYou may need to move some values to a new module to get rid of thi cycle."
+
+
+showCycle :: Graph -> [Module.Name] -> String
+showCycle _dependencyNodes [] = ""
+showCycle dependencyNodes (name:rest) =
+    "    " ++ Module.nameToString name ++ " => " ++ Module.nameToString next ++ "\n"
+    ++ showCycle dependencyNodes (next:remaining)
+  where
+    ([next], remaining) =
+        List.partition (`elem` rest) (dependencyNodes Map.! name)
