@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Crawl where
 
+import Control.Monad (forM)
 import Control.Monad.Error (MonadError, MonadIO, throwError)
 import qualified Data.Graph as Graph
 import qualified Data.List as List
@@ -15,10 +16,28 @@ import qualified Elm.Package.Paths as Path
 import qualified Elm.Package.Solution as Solution
 
 
-crawl :: (MonadIO m, MonadError String m) => FilePath -> Maybe FilePath -> m Dfs.State
-crawl root maybeFilePath =
+crawlEverything :: (MonadIO m, MonadError String m) => m ()
+crawlEverything =
+  do  solution <- Solution.read Path.solvedDependencies
+
+      packageInfo <-
+          forM (Map.toList solution) $ \(name,version) -> do
+              state <- Crawl.crawl (Path.package name version) solution Nothing
+              return (name, state)
+
+      _ <- Crawl.crawl "." solution Nothing
+      return ()
+
+
+crawlFile :: (MonadIO m, MonadError String m) => FilePath -> m Dfs.State
+crawlFile path =
+  do  solution <- Solution.read Path.solvedDependencies
+      crawl "." solution (Just path)
+
+
+crawl :: (MonadIO m, MonadError String m) => FilePath -> Solution.Solution -> Maybe FilePath -> m Dfs.State
+crawl root solution maybeFilePath =
   do  desc <- Desc.read (root </> Path.description)
-      solution <- Solution.read Path.solvedDependencies
 
       exposedModules <- Package.allExposedModules desc solution
       let sourceDirs = map (root </>) (Desc.sourceDirs desc)
