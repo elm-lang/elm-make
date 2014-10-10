@@ -1,93 +1,47 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Crawl where
 
-import Control.Monad.Error (MonadError, MonadIO, liftIO, throwError)
+import Control.Monad.Error (MonadError, MonadIO, throwError)
 import qualified Data.Graph as Graph
 import qualified Data.List as List
 import qualified Data.Map as Map
 
-import qualified Crawl.Local as Local
-import qualified Crawl.Locations as Locations
-import qualified Elm.Compiler as Compiler
+import qualified Crawl.DepthFirstSearch as Dfs
+import qualified Crawl.Packages as Package
 import qualified Elm.Compiler.Module as Module
 import qualified Elm.Package.Description as Desc
 import qualified Elm.Package.Paths as Path
+import qualified Elm.Package.Solution as Solution
 
 
-type Graph =
-    Map.Map Module.Name [Module.Name]
+crawl :: (MonadIO m, MonadError String m) => Maybe FilePath -> m Dfs.State
+crawl maybeFilePath =
+  do  desc <- Desc.read Path.description
+      solution <- Solution.read Path.solvedDependencies
+      exposedModules <- Package.allExposedModules desc solution
 
+      let env = Dfs.Env (Desc.sourceDirs desc) exposedModules
 
-crawl :: (MonadIO m, MonadError String m) => m (Locations.Locations, Graph)
-crawl =
-  do  description <- Desc.read Path.description
+      state <-
+          case maybeFilePath of
+            Just path ->
+                Dfs.crawlFile path Nothing [] env Dfs.initialState
+            Nothing ->
+                Dfs.crawlDependencies (Desc.exposed desc) env Dfs.initialState
 
-      let sourceDirs = Desc.sourceDirs description
-      let exposedModules = Desc.exposed description
+      checkForCycles (Dfs.dependencies state)
 
-      locals <- mapM (Local.findIn sourceDirs) exposedModules
-
-      initialLocations <- Locations.initialize (zip exposedModules locals)
-
-      (locations, dependencyNodes) <-
-          depthFirstSearch sourceDirs initialLocations Map.empty exposedModules
-
-      checkForCycles dependencyNodes
-
-      return (locations, dependencyNodes)
-
-
--- DEPTH FIRST SEARCH
-
-depthFirstSearch
-    :: (MonadIO m, MonadError String m)
-    => [FilePath]
-    -> Locations.Locations
-    -> Graph
-    -> [Module.Name]
-    -> m (Locations.Locations, Graph)
-
-depthFirstSearch _sourceDirs locations dependencyNodes [] =
-    return (locations, dependencyNodes)
-
-depthFirstSearch sourceDirs locations dependencyNodes (moduleName:unvisited) =
-  case Map.lookup moduleName locations of
-    Just (Locations.Package _name) ->
-        depthFirstSearch sourceDirs locations dependencyNodes unvisited
-
-    Just (Locations.Local path) ->
-        do  source <- liftIO (readFile path)
-            readFileAndContinue path locations
-
-    Nothing ->
-        do  path <- Local.findIn sourceDirs moduleName
-            let updatedLocations =
-                    Map.insert moduleName (Locations.Local path) locations
-            readFileAndContinue path updatedLocations
-
-  where
-    readFileAndContinue path updatedLocations =
-        do  source <- liftIO (readFile path)
-            (_, deps) <- Compiler.parseDependencies source
-
-            let newUnvisited =
-                    filter (\name -> not (Map.member name dependencyNodes)) deps
-
-            depthFirstSearch
-                sourceDirs
-                updatedLocations
-                (Map.insert moduleName deps dependencyNodes)
-                (unvisited ++ newUnvisited)
+      return state
 
 
 -- CHECK FOR CYCLES
 
-checkForCycles :: (MonadError String m) => Graph -> m ()
-checkForCycles dependencyNodes =
+checkForCycles :: (MonadError String m) => Map.Map Module.Name [Module.Name] -> m ()
+checkForCycles dependencies =
     mapM_ errorOnCycle components
   where
     components =
-        Graph.stronglyConnComp (map toNode (Map.toList dependencyNodes))
+        Graph.stronglyConnComp (map toNode (Map.toList dependencies))
 
     toNode (name, deps) =
         (name, name, deps)
@@ -98,15 +52,15 @@ checkForCycles dependencyNodes =
           Graph.CyclicSCC cycle ->
               throwError $
               "Your dependencies for a cycle:\n\n"
-              ++ showCycle dependencyNodes cycle
+              ++ showCycle dependencies cycle
               ++ "\nYou may need to move some values to a new module to get rid of thi cycle."
 
 
-showCycle :: Graph -> [Module.Name] -> String
-showCycle _dependencyNodes [] = ""
-showCycle dependencyNodes (name:rest) =
+showCycle :: Map.Map Module.Name [Module.Name] -> [Module.Name] -> String
+showCycle _dependencies [] = ""
+showCycle dependencies (name:rest) =
     "    " ++ Module.nameToString name ++ " => " ++ Module.nameToString next ++ "\n"
-    ++ showCycle dependencyNodes (next:remaining)
+    ++ showCycle dependencies (next:remaining)
   where
     ([next], remaining) =
-        List.partition (`elem` rest) (dependencyNodes Map.! name)
+        List.partition (`elem` rest) (dependencies Map.! name)

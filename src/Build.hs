@@ -11,7 +11,6 @@ import qualified Data.Set as Set
 
 import qualified Build.Display as Display
 import qualified Build.Queue as Queue
-import qualified Crawl.Locations as Locations
 import qualified Elm.Compiler.Module as Module
 
 
@@ -20,7 +19,6 @@ data Env = Env
     , numTasks :: Int
     , resultChan :: Chan.Chan Result
     , displayChan :: Chan.Chan Display.Update
-    , locations :: Locations.Locations
     , freeMap :: Map.Map Module.Name [Module.Name]
     }
 
@@ -75,7 +73,7 @@ buildManager env state =
     Update ->
       do  threadIds <-
               forM runNow $ \(name, interfaces) ->
-                  forkIO (buildModule (resultChan env) (locations env) name interfaces)
+                  forkIO (buildModule (resultChan env) name interfaces)
           Chan.writeChan (displayChan env) (Display.Progress progress)
           buildManager env $
               state
@@ -140,8 +138,8 @@ updateWaitingModules name interface waitingModules potentiallyFreedModule =
 
 -- UPDATE - BUILD SOME MODULES
 
-buildModule :: Chan.Chan Result -> Locations.Locations -> Module.Name -> [ModuleInterface] -> IO ()
-buildModule completionChan locations moduleName interfaces =
+buildModule :: Chan.Chan Result -> Module.Name -> [ModuleInterface] -> IO ()
+buildModule completionChan moduleName interfaces =
     do  interface <- (error "not sure how to build yet") moduleName
         threadId <- myThreadId
         Chan.writeChan completionChan (Success moduleName interface threadId)

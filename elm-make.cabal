@@ -40,12 +40,14 @@ Executable elm-make
         Main.hs
 
     other-modules:
+        Build,
+        Build.Display,
+        Build.Queue,
         Crawl,
-        Crawl.Local,
-        Crawl.Locations,
+        Crawl.DepthFirstSearch,
+        Crawl.Error,
         Crawl.Packages,
-        Crawl.Utils,
-        Crawl.Validate
+        Crawl.Utils
 
     Build-depends:
         base >=4.2 && <5,
