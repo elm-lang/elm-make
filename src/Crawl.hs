@@ -11,7 +11,6 @@ import System.FilePath ((</>))
 import qualified Crawl.DepthFirstSearch as Dfs
 import qualified Crawl.Packages as Package
 import qualified Elm.Compiler.Module as Module
-import qualified Elm.Package.Description as Desc
 import qualified Elm.Package.Paths as Path
 import qualified Elm.Package.Solution as Solution
 
@@ -22,15 +21,15 @@ crawlEverything =
 
       packageInfo <-
           forM (Map.toList solution) $ \(name,version) -> do
-              state <- Crawl.crawl (Path.package name version) solution Nothing
+              state <- Dfs.crawl (Path.package name version) solution Nothing
               return (name, state)
 
-      _ <- Crawl.crawl "." solution Nothing
+      _ <- Dfs.crawl "." solution Nothing
       return ()
 
 
 crawlFile :: (MonadIO m, MonadError String m) => FilePath -> m Dfs.State
 crawlFile path =
   do  solution <- Solution.read Path.solvedDependencies
-      crawl "." solution (Just path)
+      Dfs.crawl "." solution (Just path)
 

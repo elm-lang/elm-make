@@ -11,7 +11,7 @@ import qualified Data.Set as Set
 
 import qualified Build.Display as Display
 import qualified Elm.Compiler.Module as Module
-import qualified Utils.Graph as Graph
+import qualified Prep
 import qualified Utils.Queue as Queue
 
 
@@ -32,7 +32,7 @@ initEnv numProcessors dependencies =
           numTasks = Map.size dependencies,
           resultChan = resultChan,
           displayChan = displayChan,
-          freeMap = Graph.reverse dependencies
+          freeMap = undefined
       }
 
 

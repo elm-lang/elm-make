@@ -1,6 +1,10 @@
+{-# LANGUAGE FlexibleContexts #-}
 module Prep where
 
+import Control.Monad.Error (MonadError, throwError)
 import qualified Data.Graph as Graph
+import qualified Data.List as List
+import Data.Map ((!))
 import qualified Data.Map as Map
 import qualified Data.Traversable as Traversable
 import System.Directory (doesFileExist, getModificationTime)
@@ -47,9 +51,10 @@ isFresh elmi path =
 -- FILTER STALE INTERFACES -- have files become stale due to other changes?
 
 filterStaleInterfaces
-    :: Map.Map Module.Name [Module.Name]
+    :: (MonadError String m)
+    => Map.Map Module.Name [Module.Name]
     -> Map.Map Module.Name (FilePath, Maybe Module.Interface)
-    -> Map.Map Module.Name (FilePath, Maybe Module.Interface)
+    -> m (Map.Map Module.Name (FilePath, Maybe Module.Interface))
 filterStaleInterfaces dependencies locatedModules =
   do  sortedNames <- topologicalSort dependencies
       return $ List.foldl' (filterIfStale dependencies) locatedModules sortedNames
@@ -86,18 +91,20 @@ enrichDependencies
     -> Map.Map Module.Name (FilePath, Maybe Module.Interface)
     -> Map.Map Module.Name ([Module.Name], Map.Map Module.Name Module.Interface)
 enrichDependencies dependencies locatedModules =
-    Map.map enrich (Map.mapMaybe snd dependencies)
-
+    Map.map (enrich interfaces) dependencies
+  where
+    interfaces =
+        Map.mapMaybe snd locatedModules
 
 enrich
-    :: [Module.Name]
-    -> Map.Map Module.Name Module.Interface
+    :: Map.Map Module.Name Module.Interface
+    -> [Module.Name]
     -> ([Module.Name], Map.Map Module.Name Module.Interface)
-enrich dependencies locatedModules =
+enrich interfaces dependencies =
     List.foldl' insert ([], Map.empty) dependencies
   where
     insert (blocking, ready) name =
-        case Map.lookup name locatedModules of
+        case Map.lookup name interfaces of
           Just interface ->
               (blocking, Map.insert name interface ready)
           Nothing ->

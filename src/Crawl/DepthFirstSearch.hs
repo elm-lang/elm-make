@@ -10,9 +10,13 @@ import System.Directory (doesFileExist)
 import System.FilePath ((</>), (<.>))
 
 import qualified Crawl.Error as Error
+import qualified Crawl.Packages as Package
 import qualified Elm.Compiler as Compiler
 import qualified Elm.Compiler.Module as Module
+import qualified Elm.Package.Description as Desc
 import qualified Elm.Package.Name as Pkg
+import qualified Elm.Package.Paths as Path
+import qualified Elm.Package.Solution as Solution
 
 
 -- STATE and ENVIRONMENT
@@ -35,19 +39,19 @@ initialState =
 
 -- GENERIC CRAWLER
 
-crawl :: (MonadIO m, MonadError String m) => FilePath -> Solution.Solution -> Maybe FilePath -> m Dfs.State
+crawl :: (MonadIO m, MonadError String m) => FilePath -> Solution.Solution -> Maybe FilePath -> m State
 crawl root solution maybeFilePath =
   do  desc <- Desc.read (root </> Path.description)
 
       exposedModules <- Package.allExposedModules desc solution
       let sourceDirs = map (root </>) (Desc.sourceDirs desc)
-      let env = Dfs.Env sourceDirs exposedModules
+      let env = Env sourceDirs exposedModules
 
       case maybeFilePath of
         Just path ->
-            dfsFile path Nothing [] env Dfs.initialState
+            dfsFile path Nothing [] env initialState
         Nothing ->
-            dfsDependencies (Desc.exposed desc) env Dfs.initialState
+            dfsDependencies (Desc.exposed desc) env initialState
 
 
 -- DEPTH FIRST SEARCH
