@@ -46,14 +46,18 @@ Executable elm-make
         Crawl,
         Crawl.DepthFirstSearch,
         Crawl.Error,
-        Crawl.Packages
+        Crawl.Packages,
+        Options,
+        Paths_elm_make
 
     Build-depends:
+        ansi-wl-pprint,
         base >=4.2 && <5,
         containers >= 0.3,
         directory,
         Elm,
         elm-package,
         filepath,
-        mtl
+        mtl,
+        optparse-applicative >=0.10 && <0.11
   

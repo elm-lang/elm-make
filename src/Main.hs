@@ -4,8 +4,9 @@ import Control.Concurrent (forkIO, threadDelay)
 import qualified Control.Concurrent.Chan as Chan
 import GHC.Conc (getNumProcessors, setNumCapabilities)
 
-import Build
-import Crawl
+import qualified Build
+import qualified Crawl
+import qualified Options
 import qualified Build.Display as Display
 import qualified Elm.Compiler.Module as Module
 
