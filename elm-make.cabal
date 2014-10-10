@@ -46,8 +46,7 @@ Executable elm-make
         Crawl,
         Crawl.DepthFirstSearch,
         Crawl.Error,
-        Crawl.Packages,
-        Crawl.Utils
+        Crawl.Packages
 
     Build-depends:
         base >=4.2 && <5,
