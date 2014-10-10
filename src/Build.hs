@@ -10,8 +10,9 @@ import qualified Data.Maybe as Maybe
 import qualified Data.Set as Set
 
 import qualified Build.Display as Display
-import qualified Build.Queue as Queue
 import qualified Elm.Compiler.Module as Module
+import qualified Utils.Graph as Graph
+import qualified Utils.Queue as Queue
 
 
 data Env = Env
@@ -21,6 +22,19 @@ data Env = Env
     , displayChan :: Chan.Chan Display.Update
     , freeMap :: Map.Map Module.Name [Module.Name]
     }
+
+initEnv :: Int -> Map.Map Module.Name [Module.Name] -> IO Env
+initEnv numProcessors dependencies =
+  do  resultChan <- Chan.newChan
+      displayChan <- Chan.newChan
+      return $ Env {
+          maxActiveThreads = numProcessors,
+          numTasks = Map.size dependencies,
+          resultChan = resultChan,
+          displayChan = displayChan,
+          freeMap = Graph.reverse dependencies
+      }
+
 
 data State = State
     { currentState :: CurrentState

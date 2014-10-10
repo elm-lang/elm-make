@@ -42,13 +42,14 @@ Executable elm-make
     other-modules:
         Build,
         Build.Display,
-        Build.Queue,
         Crawl,
         Crawl.DepthFirstSearch,
         Crawl.Error,
         Crawl.Packages,
         Options,
-        Paths_elm_make
+        Paths_elm_make,
+        Utils.Graph,
+        Utils.Queue
 
     Build-depends:
         ansi-wl-pprint,

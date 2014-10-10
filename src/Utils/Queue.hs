@@ -1,4 +1,4 @@
-module Build.Queue where
+module Utils.Queue where
 
 
 newtype Queue a =
