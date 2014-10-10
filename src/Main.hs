@@ -5,7 +5,7 @@ import GHC.Conc (getNumProcessors, setNumCapabilities)
 import qualified Build
 import qualified Crawl
 import qualified Options
-import qualified Build.Display as Display
+import qualified Prep
 import qualified Elm.Compiler.Module as Module
 
 

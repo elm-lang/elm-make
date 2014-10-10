@@ -33,25 +33,42 @@ initialState =
     State Map.empty Map.empty Set.empty
 
 
--- CRAWLERS
+-- GENERIC CRAWLER
 
-crawlDependencies
+crawl :: (MonadIO m, MonadError String m) => FilePath -> Solution.Solution -> Maybe FilePath -> m Dfs.State
+crawl root solution maybeFilePath =
+  do  desc <- Desc.read (root </> Path.description)
+
+      exposedModules <- Package.allExposedModules desc solution
+      let sourceDirs = map (root </>) (Desc.sourceDirs desc)
+      let env = Dfs.Env sourceDirs exposedModules
+
+      case maybeFilePath of
+        Just path ->
+            dfsFile path Nothing [] env Dfs.initialState
+        Nothing ->
+            dfsDependencies (Desc.exposed desc) env Dfs.initialState
+
+
+-- DEPTH FIRST SEARCH
+
+dfsDependencies
     :: (MonadIO m, MonadError String m)
     => [Module.Name] -> Env -> State -> m State
 
-crawlDependencies [] _env state =
+dfsDependencies [] _env state =
     return state
 
-crawlDependencies (name:unvisited) env state =
+dfsDependencies (name:unvisited) env state =
   do  filePaths <- find (sourceDirs env) name
       case (filePaths, Map.lookup name (exposedModules env)) of
         ([filePath], Nothing) ->
-            crawlFile filePath (Just name) unvisited env $ state {
+            dfsFile filePath (Just name) unvisited env $ state {
                 localModules = Map.insert name filePath (localModules state)
             }
 
         ([], Just [pkg]) ->
-            crawlDependencies unvisited env $ state {
+            dfsDependencies unvisited env $ state {
                 usedPackages = Set.insert pkg (usedPackages state)
             }
 
@@ -65,11 +82,11 @@ crawlDependencies (name:unvisited) env state =
             pkgs = map ("package " ++) (Maybe.maybe [] (map Pkg.toString) maybePkgs)
 
 
-crawlFile
+dfsFile
     :: (MonadIO m, MonadError String m)
     => FilePath -> Maybe Module.Name -> [Module.Name] -> Env -> State -> m State
 
-crawlFile path maybeName unvisited env state =
+dfsFile path maybeName unvisited env state =
   do  source <- liftIO (readFile path)
       (name, deps) <- Compiler.parseDependencies source
 
@@ -78,7 +95,7 @@ crawlFile path maybeName unvisited env state =
       let newUnvisited =
               filter (flip Map.notMember (dependencies state)) deps
 
-      crawlDependencies (unvisited ++ newUnvisited) env $ state {
+      dfsDependencies (unvisited ++ newUnvisited) env $ state {
           dependencies = Map.insert name deps (dependencies state)
       }
 
