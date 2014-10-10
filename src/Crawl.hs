@@ -5,6 +5,7 @@ import Control.Monad.Error (MonadError, MonadIO, throwError)
 import qualified Data.Graph as Graph
 import qualified Data.List as List
 import qualified Data.Map as Map
+import System.FilePath ((</>))
 
 import qualified Crawl.DepthFirstSearch as Dfs
 import qualified Crawl.Packages as Package
@@ -14,13 +15,14 @@ import qualified Elm.Package.Paths as Path
 import qualified Elm.Package.Solution as Solution
 
 
-crawl :: (MonadIO m, MonadError String m) => Maybe FilePath -> m Dfs.State
-crawl maybeFilePath =
-  do  desc <- Desc.read Path.description
+crawl :: (MonadIO m, MonadError String m) => FilePath -> Maybe FilePath -> m Dfs.State
+crawl root maybeFilePath =
+  do  desc <- Desc.read (root </> Path.description)
       solution <- Solution.read Path.solvedDependencies
-      exposedModules <- Package.allExposedModules desc solution
 
-      let env = Dfs.Env (Desc.sourceDirs desc) exposedModules
+      exposedModules <- Package.allExposedModules desc solution
+      let sourceDirs = map (root </>) (Desc.sourceDirs desc)
+      let env = Dfs.Env sourceDirs exposedModules
 
       state <-
           case maybeFilePath of
