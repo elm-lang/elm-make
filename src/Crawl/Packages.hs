@@ -5,7 +5,6 @@ import Control.Monad.Error (MonadError, MonadIO, liftIO)
 import Data.Map ((!))
 import qualified Data.Map as Map
 import System.Directory (getCurrentDirectory, setCurrentDirectory)
-import System.FilePath ((</>))
 
 import qualified Elm.Compiler.Module as Module
 import qualified Elm.Package.Description as Desc
@@ -38,7 +37,7 @@ exposedModules
     => (N.Name, V.Version)
     -> m (Map.Map Module.Name [N.Name])
 exposedModules (pkgName, version) =
-    within (rootOf pkgName version) $ do
+    within (Path.package pkgName version) $ do
         description <- Desc.read Path.description
         let exposed = Desc.exposed description
         return (foldr insert Map.empty exposed)
@@ -48,11 +47,6 @@ exposedModules (pkgName, version) =
 
 
 -- HELPERS
-
-rootOf :: N.Name -> V.Version -> FilePath
-rootOf name version =
-    Path.packagesDirectory </> N.toFilePath name </> V.toString version
-
 
 within :: (MonadIO m) => FilePath -> m a -> m a
 within directory command =
