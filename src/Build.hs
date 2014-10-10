@@ -39,14 +39,12 @@ initEnv numProcessors dependencies =
 data State = State
     { currentState :: CurrentState
     , activeThreads :: Set.Set ThreadId
-    , readyQueue :: Queue.Queue (Module.Name, [ModuleInterface])
+    , readyQueue :: Queue.Queue (Module.Name, [Module.Interface])
     , waitingModules :: WaitingModules
     }
 
-data ModuleInterface = TODO_IMPLEMENT_ME
-
 type WaitingModules =
-    Map.Map Module.Name ([Module.Name], [ModuleInterface])
+    Map.Map Module.Name ([Module.Name], [Module.Interface])
 
 data CurrentState = Wait | Update
 
@@ -58,7 +56,7 @@ numIncompleteTasks state =
 
 data Result
     = Error
-    | Success Module.Name ModuleInterface ThreadId
+    | Success Module.Name Module.Interface ThreadId
 
 
 build :: IO ()
@@ -106,7 +104,7 @@ buildManager env state =
 
 -- WAIT - REGISTER RESULTS
 
-registerSuccess :: Env -> State -> Module.Name -> ModuleInterface -> ThreadId -> State
+registerSuccess :: Env -> State -> Module.Name -> Module.Interface -> ThreadId -> State
 registerSuccess env state name interface threadId =
     state
     { currentState = Update
@@ -124,10 +122,10 @@ registerSuccess env state name interface threadId =
 
 updateWaitingModules
     :: Module.Name
-    -> ModuleInterface
+    -> Module.Interface
     -> WaitingModules
     -> Module.Name
-    -> (WaitingModules, Maybe (Module.Name, [ModuleInterface]))
+    -> (WaitingModules, Maybe (Module.Name, [Module.Interface]))
 updateWaitingModules name interface waitingModules potentiallyFreedModule =
   case Map.lookup potentiallyFreedModule waitingModules of
     Nothing ->
@@ -152,7 +150,7 @@ updateWaitingModules name interface waitingModules potentiallyFreedModule =
 
 -- UPDATE - BUILD SOME MODULES
 
-buildModule :: Chan.Chan Result -> Module.Name -> [ModuleInterface] -> IO ()
+buildModule :: Chan.Chan Result -> Module.Name -> [Module.Interface] -> IO ()
 buildModule completionChan moduleName interfaces =
     do  interface <- (error "not sure how to build yet") moduleName
         threadId <- myThreadId
