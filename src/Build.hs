@@ -1,8 +1,10 @@
+{-# LANGUAGE FlexibleContexts #-}
 module Build where
 
 import Control.Concurrent (ThreadId, myThreadId, forkIO, killThread)
 import qualified Control.Concurrent.Chan as Chan
 import Control.Monad (forM)
+import Control.Monad.Error (MonadError, MonadIO)
 import qualified Data.List as List
 import Data.Map ((!))
 import qualified Data.Map as Map
@@ -32,7 +34,7 @@ initEnv numProcessors dependencies =
           numTasks = Map.size dependencies,
           resultChan = resultChan,
           displayChan = displayChan,
-          freeMap = undefined
+          freeMap = Prep.reverseGraph dependencies
       }
 
 
@@ -47,6 +49,20 @@ type WaitingModules =
     Map.Map Module.Name ([Module.Name], [Module.Interface])
 
 data CurrentState = Wait | Update
+
+
+initState
+    :: (MonadIO m, MonadError String m)
+    => m State
+initState =
+  do  
+      return $ State {
+          currentState = Update,
+          activeThreads = Set.empty,
+          readyQueue = Queue.fromList undefined,
+          waitingModules = undefined
+      }
+
 
 numIncompleteTasks :: State -> Int
 numIncompleteTasks state =

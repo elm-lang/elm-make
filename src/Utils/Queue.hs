@@ -10,6 +10,11 @@ empty =
     Queue ([],[])
 
 
+fromList :: [a] -> Queue a
+fromList list =
+    Queue (list, [])
+
+
 size :: Queue a -> Int
 size (Queue (front, back)) =
     length front + length back
