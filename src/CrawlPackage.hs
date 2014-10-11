@@ -16,7 +16,7 @@ import qualified Elm.Package.Name as Pkg
 import qualified Elm.Package.Paths as Path
 import qualified Elm.Package.Solution as Solution
 import qualified Elm.Package.Version as V
-import TheMasterPlan (PackageSummary(..))
+import TheMasterPlan (PackageSummary(..), PackageData(..))
 
 
 -- STATE and ENVIRONMENT
@@ -28,7 +28,7 @@ data Env = Env
 
 emptyPackageSummary :: PackageSummary
 emptyPackageSummary =
-    PackageSummary Map.empty Map.empty Map.empty
+    PackageSummary Map.empty Map.empty
 
 
 -- GENERIC CRAWLER
@@ -57,17 +57,20 @@ dfsDependencies
 dfsDependencies [] _env summary =
     return summary
 
+dfsDependencies (name:unvisited) env summary
+    | Map.member name (packageData summary) =
+        dfsDependencies unvisited env summary
+
 dfsDependencies (name:unvisited) env summary =
   do  filePaths <- find (sourceDirs env) name
       case (filePaths, Map.lookup name (availableForeignModules env)) of
         ([filePath], Nothing) ->
-            dfsFile filePath (Just name) unvisited env $ summary {
-                packageLocations = Map.insert name filePath (packageLocations summary)
-            }
+            dfsFile filePath (Just name) unvisited env summary
 
         ([], Just [pkg]) ->
             dfsDependencies unvisited env $ summary {
-                foreignDependencies = Map.insert name pkg (foreignDependencies summary)
+                packageForeignDependencies =
+                    Map.insert name pkg (packageForeignDependencies summary)
             }
 
         ([], Nothing) ->
@@ -84,17 +87,15 @@ dfsFile
     :: (MonadIO m, MonadError String m)
     => FilePath -> Maybe Module.Name -> [Module.Name] -> Env -> PackageSummary -> m PackageSummary
 
-dfsFile path maybeName unvisited env summary =
-  do  source <- liftIO (readFile path)
+dfsFile filePath maybeName unvisited env summary =
+  do  source <- liftIO (readFile filePath)
       (name, deps) <- Compiler.parseDependencies source
 
-      checkName path name maybeName
+      checkName filePath name maybeName
 
-      let newUnvisited =
-              filter (flip Map.notMember (packageDependencies summary)) deps
-
-      dfsDependencies (unvisited ++ newUnvisited) env $ summary {
-          packageDependencies = Map.insert name deps (packageDependencies summary)
+      dfsDependencies (deps ++ unvisited) env $ summary {
+          packageData =
+              Map.insert name (PackageData filePath deps) (packageData summary)
       }
 
 
