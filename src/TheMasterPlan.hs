@@ -14,8 +14,8 @@ import qualified Elm.Package.Name as Pkg
 -- UNIQUE IDENTIFIERS FOR MODULES
 
 data ModuleID = ModuleID
-    { moduleName :: Module.Name
-    , packageName :: Pkg.Name
+    { packageName :: Pkg.Name
+    , moduleName :: Module.Name
     }
     deriving (Eq, Ord)
 
@@ -26,16 +26,20 @@ data ModuleID = ModuleID
 We obtain this information by doing a depth first search starting with a
 file or package description.
 
-  * packageLocations - file path to each local module
-  * packageDependencies - modules needed by each local module
-  * foreignDependencies -
+  * packageData
+      file path to module and modules depended upon
+  * packageForeignDependencies
       any foreign modules that are needed locally and which package owns them
 
 -}
 data PackageSummary = PackageSummary
-    { packageLocations :: Map.Map Module.Name FilePath
-    , packageDependencies :: Map.Map Module.Name [Module.Name]
-    , foreignDependencies :: Map.Map Module.Name Pkg.Name
+    { packageData :: Map.Map Module.Name PackageData
+    , packageForeignDependencies :: Map.Map Module.Name Pkg.Name
+    }
+
+data PackageData = PackageData
+    { packagePath :: FilePath
+    , packageDepenencies :: [Module.Name]
     }
 
 
@@ -46,9 +50,12 @@ unique by adding which package it comes from. This makes it safe to merge a
 bunch of PackageSummaries together, so we can write the rest of our code
 without thinking about package boundaries.
 -}
-data ProjectSummary = ProjectSummary
-    { projectLocations :: Map.Map ModuleID Location
-    , projectDependencies :: Map.Map ModuleID [ModuleID]
+type ProjectSummary =
+    Map.Map ModuleID ProjectData
+
+data ProjectData = ProjectData
+    { projectLocation :: Location
+    , projectDependencies :: [ModuleID]
     }
 
 data Location = Location
@@ -66,7 +73,7 @@ these cached interfaces, so we filter out any stale interfaces.
 The resulting format is very convenient for managing parallel builds.
 -}
 type BuildSummary =
-    Map.Map ModuleID BuildDependencies
+    Map.Map ModuleID BuildData
 
 
 {-| Everything you need to know to build a file.
@@ -79,7 +86,7 @@ We move modules from 'blocking' to 'ready' as the build progresses and
 interfaces are produced. When 'blocking' is empty, it is safe to add this
 module to the build queue.
 -}
-data BuildDependencies = BuildDependencies
+data BuildData = BuildData
     { blocking :: [ModuleID]
     , ready :: Map.Map ModuleID Module.Interface
     , location :: Location
