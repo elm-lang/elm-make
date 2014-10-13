@@ -3,6 +3,7 @@ module Build where
 
 import Control.Concurrent (ThreadId, myThreadId, forkIO, killThread)
 import qualified Control.Concurrent.Chan as Chan
+import qualified Control.Exception as Exception
 import Control.Monad (forM)
 import qualified Data.List as List
 import qualified Data.Map as Map
@@ -11,6 +12,7 @@ import qualified Data.Set as Set
 
 import qualified Build.Display as Display
 import qualified Elm.Compiler.Module as Module
+import qualified Path
 import qualified Utils.Queue as Queue
 import TheMasterPlan (ModuleID, Location, BuildSummary, BuildData(..))
 
@@ -188,6 +190,14 @@ buildModule
     -> Map.Map ModuleID Module.Interface
     -> IO ()
 buildModule completionChan moduleName location interfaces =
-    do  interface <- return undefined -- location interfaces
-        threadId <- myThreadId
-        Chan.writeChan completionChan (Success moduleName interface threadId)
+    Exception.catch compile recover
+  where
+    compile =
+      do  source <- readFile (Path.fromLocation location)
+          interface <- return undefined -- Compiler.compile interfaces source
+          threadId <- myThreadId
+          Chan.writeChan completionChan (Success moduleName interface threadId)
+
+    recover :: Exception.SomeException -> IO ()
+    recover msg =
+      Chan.writeChan completionChan Error
