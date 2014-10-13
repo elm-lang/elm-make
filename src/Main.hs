@@ -2,10 +2,11 @@ module Main where
 
 import GHC.Conc (getNumProcessors, setNumCapabilities)
 
-import qualified Build
-import qualified Crawl
+--import qualified Build
+import qualified CrawlPackage
+import qualified CrawlProject
+import qualified LoadInterfaces
 import qualified Options
-import qualified Prep
 import qualified Elm.Compiler.Module as Module
 
 

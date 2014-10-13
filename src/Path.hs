@@ -1,27 +1,23 @@
+{-# LANGUAGE FlexibleContexts #-}
 module Path where
 
+import Control.Monad.RWS (MonadReader, ask)
 import System.FilePath ((</>), (<.>))
 
 import Elm.Compiler.Module as Module
 import Elm.Package.Name as Pkg
+import TheMasterPlan (ModuleID(ModuleID), Location(Location))
 
 
-toInterface :: Maybe Pkg.Name -> Module.Name -> FilePath
-toInterface maybePackage moduleName =
-    root </> interfacePath
+fromModuleID :: (MonadReader FilePath m) => ModuleID -> m FilePath
+fromModuleID (ModuleID pkgName moduleName) =
+  do  root <- ask
+      return (root </> pkgPath </> modulePath <.> "elmi")
   where
-    interfacePath =
-        Module.nameToPath moduleName <.> "elmi"
-
-    root =
-        case maybePackage of
-          Nothing -> 
-              artifactsDirectory
-
-          Just pkgName ->
-              artifactsDirectory </> Pkg.toFilePath pkgName
+    pkgPath = Pkg.toFilePath pkgName
+    modulePath = Module.nameToPath moduleName
 
 
-artifactsDirectory :: FilePath
-artifactsDirectory =
-    "elm_artifacts"
+fromLocation :: Location -> FilePath
+fromLocation (Location package relativePath) =
+    Pkg.toFilePath package </> error "version" </> relativePath

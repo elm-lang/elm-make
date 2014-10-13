@@ -50,11 +50,11 @@ unique by adding which package it comes from. This makes it safe to merge a
 bunch of PackageSummaries together, so we can write the rest of our code
 without thinking about package boundaries.
 -}
-type ProjectSummary =
-    Map.Map ModuleID ProjectData
+type ProjectSummary a =
+    Map.Map ModuleID (ProjectData a)
 
-data ProjectData = ProjectData
-    { projectLocation :: Location
+data ProjectData a = ProjectData
+    { projectLocation :: a
     , projectDependencies :: [ModuleID]
     }
 
