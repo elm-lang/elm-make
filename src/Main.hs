@@ -2,9 +2,11 @@
 module Main where
 
 import Control.Monad (forM)
-import Control.Monad.Error (MonadError, MonadIO, liftIO)
-import Control.Monad.Reader (MonadReader)
+import Control.Monad.Error (MonadError, runErrorT, MonadIO, liftIO)
+import Control.Monad.Reader (MonadReader, runReaderT)
 import qualified Data.Map as Map
+import System.Exit (exitFailure)
+import System.IO (hPutStrLn, stderr)
 import GHC.Conc (getNumProcessors, setNumCapabilities)
 
 import qualified Build
@@ -20,18 +22,23 @@ import TheMasterPlan (Location, ProjectSummary(..), ProjectData(..))
 
 
 main :: IO ()
-main = return ()
-
-{--
-      option <- Options.parse
+main =
+  do  option <- Options.parse
       case option of
         Options.BuildPackage -> return ()
         Options.BuildFile path -> return ()
---}
+
+      result <- runErrorT (runReaderT run "cache")
+      case result of
+        Right () -> return ()
+        Left msg ->
+          do  hPutStrLn stderr msg
+              exitFailure
+
 
 run :: (MonadIO m, MonadError String m, MonadReader FilePath m) => m ()
 run =
-  do  numProcessors <- liftIO (getNumProcessors)
+  do  numProcessors <- liftIO getNumProcessors
       liftIO (setNumCapabilities numProcessors)
 
       projectSummary <- crawl
