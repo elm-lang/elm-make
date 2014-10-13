@@ -14,13 +14,12 @@ import TheMasterPlan
 
 canonicalizePackageSummary
     :: Pkg.Name
-    -> Map.Map Module.Name Pkg.Name
     -> PackageSummary
     -> ProjectSummary Location
-canonicalizePackageSummary pkgName foreignDependencies pkgSummary =
+canonicalizePackageSummary pkgName (PackageSummary pkgData foreignDependencies) =
     Map.map
         (canonicalizePackageData pkgName foreignDependencies)
-        (Map.mapKeysMonotonic (ModuleID pkgName) (packageData pkgSummary))
+        (Map.mapKeysMonotonic (ModuleID pkgName) pkgData)
 
 
 canonicalizePackageData

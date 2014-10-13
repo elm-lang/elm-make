@@ -6,6 +6,7 @@ import System.FilePath ((</>), (<.>))
 
 import Elm.Compiler.Module as Module
 import Elm.Package.Name as Pkg
+import Elm.Package.Version as V
 import TheMasterPlan (ModuleID(ModuleID), Location(Location))
 
 
@@ -21,3 +22,8 @@ fromModuleID (ModuleID pkgName moduleName) =
 fromLocation :: Location -> FilePath
 fromLocation (Location package relativePath) =
     Pkg.toFilePath package </> error "version" </> relativePath
+
+
+fromPackage :: Pkg.Name -> V.Version -> FilePath
+fromPackage name version =
+    Pkg.toFilePath name </> V.toString version

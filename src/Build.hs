@@ -91,11 +91,11 @@ numIncompleteTasks state =
 
 -- PARALLEL BUILDS!!!
 
-build :: IO ()
-build =
-  do  displayChan <- Chan.newChan
-      Display.display displayChan 0
-      buildManager (error "env") (error "state")
+build :: Int -> Map.Map ModuleID [ModuleID] -> BuildSummary -> IO ()
+build numProcessors dependencies summary =
+  do  env <- initEnv numProcessors dependencies summary
+      Display.display (displayChan env) 0
+      buildManager env (initState summary)
 
 
 buildManager :: Env -> State -> IO ()
