@@ -40,15 +40,7 @@ Executable elm-make
         Main.hs
 
     other-modules:
-        Build,
-        Build.Display,
-        Crawl,
-        Crawl.DepthFirstSearch,
-        Crawl.Error,
-        Crawl.Packages,
-        Options,
-        Paths_elm_make,
-        Utils.Queue
+        Paths_elm_make
 
     Build-depends:
         ansi-wl-pprint,
