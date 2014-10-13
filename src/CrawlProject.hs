@@ -6,38 +6,38 @@ import qualified Data.Map as Map
 import qualified Elm.Compiler.Module as Module
 import qualified Elm.Package.Name as Pkg
 import TheMasterPlan
-    ( ModuleID(ModuleID), Location(Location)
+    ( ModuleID(ModuleID), PackageID, Location(Location)
     , PackageSummary(..), PackageData(..)
     , ProjectSummary, ProjectData(..)
     )
 
 
 canonicalizePackageSummary
-    :: Pkg.Name
+    :: Maybe PackageID
     -> PackageSummary
     -> ProjectSummary Location
-canonicalizePackageSummary pkgName (PackageSummary pkgData foreignDependencies) =
+canonicalizePackageSummary package (PackageSummary pkgData foreignDependencies) =
     Map.map
-        (canonicalizePackageData pkgName foreignDependencies)
-        (Map.mapKeysMonotonic (ModuleID pkgName) pkgData)
+        (canonicalizePackageData package foreignDependencies)
+        (Map.mapKeysMonotonic (\name -> ModuleID name package) pkgData)
 
 
 canonicalizePackageData
-    :: Pkg.Name
-    -> Map.Map Module.Name Pkg.Name
+    :: Maybe PackageID
+    -> Map.Map Module.Name PackageID
     -> PackageData
     -> ProjectData Location
-canonicalizePackageData pkgName foreignDependencies (PackageData filePath deps) =
+canonicalizePackageData package foreignDependencies (PackageData filePath deps) =
     ProjectData {
-        projectLocation = Location pkgName filePath,
+        projectLocation = Location filePath package,
         projectDependencies = map canonicalizeModule deps
     }
   where
     canonicalizeModule :: Module.Name -> ModuleID
     canonicalizeModule moduleName =
         case Map.lookup moduleName foreignDependencies of
-          Nothing -> ModuleID pkgName moduleName
+          Nothing -> ModuleID moduleName package
           Just foreignPackage ->
-              ModuleID foreignPackage moduleName
+              ModuleID moduleName (Just foreignPackage)
 
 

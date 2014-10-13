@@ -9,15 +9,18 @@ The idea is that our implementation should be guiding us between these models.
 import qualified Data.Map as Map
 import qualified Elm.Compiler.Module as Module
 import qualified Elm.Package.Name as Pkg
+import qualified Elm.Package.Version as V
 
 
 -- UNIQUE IDENTIFIERS FOR MODULES
 
 data ModuleID = ModuleID
-    { packageName :: Pkg.Name
-    , moduleName :: Module.Name
+    { moduleName :: Module.Name
+    , packageID :: Maybe PackageID
     }
     deriving (Eq, Ord)
+
+type PackageID = (Pkg.Name, V.Version)
 
 
 -- CRAWL AN INDIVIDUAL PACKGE
@@ -34,7 +37,7 @@ file or package description.
 -}
 data PackageSummary = PackageSummary
     { packageData :: Map.Map Module.Name PackageData
-    , packageForeignDependencies :: Map.Map Module.Name Pkg.Name
+    , packageForeignDependencies :: Map.Map Module.Name PackageID
     }
 
 data PackageData = PackageData
@@ -59,8 +62,8 @@ data ProjectData a = ProjectData
     }
 
 data Location = Location
-    { package :: Pkg.Name
-    , relativePath :: FilePath
+    { relativePath :: FilePath
+    , package :: Maybe PackageID
     }
 
 

@@ -11,17 +11,24 @@ import TheMasterPlan (ModuleID(ModuleID), Location(Location))
 
 
 fromModuleID :: (MonadReader FilePath m) => ModuleID -> m FilePath
-fromModuleID (ModuleID pkgName moduleName) =
+fromModuleID (ModuleID moduleName package) =
   do  root <- ask
-      return (root </> pkgPath </> modulePath <.> "elmi")
+      return $ root </> inPackage package (modulePath <.> "elmi")
   where
-    pkgPath = Pkg.toFilePath pkgName
     modulePath = Module.nameToPath moduleName
 
 
 fromLocation :: Location -> FilePath
-fromLocation (Location package relativePath) =
-    Pkg.toFilePath package </> error "version" </> relativePath
+fromLocation (Location relativePath package) =
+    inPackage package relativePath
+
+
+inPackage :: Maybe (Pkg.Name, V.Version) -> FilePath -> FilePath
+inPackage packageID relativePath =
+    case packageID of
+      Nothing -> relativePath
+      Just (name, version) ->
+          fromPackage name version </> relativePath
 
 
 fromPackage :: Pkg.Name -> V.Version -> FilePath

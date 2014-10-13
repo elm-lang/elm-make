@@ -169,7 +169,7 @@ showCycle dependencies (name:rest) =
     "    " ++ idToString name ++ " => " ++ idToString next ++ "\n"
     ++ showCycle dependencies (next:remaining)
   where
-    idToString (ModuleID _ moduleName) =
+    idToString (ModuleID moduleName _pkg) =
         Module.nameToString moduleName
     ([next], remaining) =
         List.partition (`elem` rest) (dependencies Map.! name)

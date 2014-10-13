@@ -18,7 +18,7 @@ import qualified Elm.Package.Name as Pkg
 import qualified Elm.Package.Paths as Path
 import qualified Elm.Package.Solution as Solution
 import qualified Path as BuildPath
-import TheMasterPlan (Location, ProjectSummary(..), ProjectData(..))
+import TheMasterPlan (PackageID(..), Location, ProjectSummary(..), ProjectData(..))
 
 
 main :: IO ()
@@ -55,10 +55,10 @@ crawl =
       summaries <-
           forM (Map.toList solution) $ \(name,version) -> do
               packageSummary <- CrawlPackage.crawl (BuildPath.fromPackage name version) solution Nothing
-              return (CrawlProject.canonicalizePackageSummary name packageSummary)
+              return (CrawlProject.canonicalizePackageSummary (Just (name,version)) packageSummary)
 
       summary <-
           do  packageSummary <- CrawlPackage.crawl "." solution Nothing
-              return (CrawlProject.canonicalizePackageSummary Pkg.dummyName packageSummary)
+              return (CrawlProject.canonicalizePackageSummary Nothing packageSummary)
 
       return (Map.unions (summary : summaries))

@@ -15,14 +15,14 @@ import qualified Elm.Package.Name as Pkg
 import qualified Elm.Package.Paths as Path
 import qualified Elm.Package.Solution as Solution
 import qualified Elm.Package.Version as V
-import TheMasterPlan (PackageSummary(..), PackageData(..))
+import TheMasterPlan (PackageID, PackageSummary(..), PackageData(..))
 
 
 -- STATE and ENVIRONMENT
 
 data Env = Env
     { sourceDirs :: [FilePath]
-    , availableForeignModules :: Map.Map Module.Name [Pkg.Name]
+    , availableForeignModules :: Map.Map Module.Name [(Pkg.Name, V.Version)]
     }
 
 emptyPackageSummary :: PackageSummary
@@ -79,7 +79,7 @@ dfsDependencies (name:unvisited) env summary =
             throwError (errorTooMany name (paths ++ pkgs))
           where
             paths = map ("directory " ++) filePaths
-            pkgs = map ("package " ++) (Maybe.maybe [] (map Pkg.toString) maybePkgs)
+            pkgs = map ("package " ++) (Maybe.maybe [] (map (Pkg.toString . fst)) maybePkgs)
 
 
 dfsFile
@@ -132,7 +132,7 @@ readAvailableForeignModules
     :: (MonadIO m, MonadError String m)
     => Desc.Description
     -> Solution.Solution
-    -> m (Map.Map Module.Name [Pkg.Name])
+    -> m (Map.Map Module.Name [(Pkg.Name, V.Version)])
 readAvailableForeignModules desc solution =
   do  visiblePackages <- allVisible desc solution
       rawLocations <- mapM exposedModules visiblePackages
@@ -162,15 +162,15 @@ allVisible desc solution =
 exposedModules
     :: (MonadIO m, MonadError String m)
     => (Pkg.Name, V.Version)
-    -> m (Map.Map Module.Name [Pkg.Name])
-exposedModules (pkgName, version) =
+    -> m (Map.Map Module.Name [(Pkg.Name, V.Version)])
+exposedModules packageID@(pkgName, version) =
     within (Path.package pkgName version) $ do
         description <- Desc.read Path.description
         let exposed = Desc.exposed description
         return (foldr insert Map.empty exposed)
   where
     insert moduleName dict =
-        Map.insert moduleName [pkgName] dict
+        Map.insert moduleName [packageID] dict
 
 
 within :: (MonadIO m) => FilePath -> m a -> m a

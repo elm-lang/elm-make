@@ -20,7 +20,7 @@ display updates completeTasks totalTasks =
       update <- Chan.readChan updates
       putStr clearProgressBar
       case update of
-        Completion (ModuleID _pkg name) ->
+        Completion (ModuleID name _pkg) ->
             do  putStrLn $ "Done with " ++ Module.nameToString name
                 display updates (completeTasks + 1) totalTasks
 
@@ -28,7 +28,8 @@ display updates completeTasks totalTasks =
             putStrLn $ "Success! Compiled " ++ show completeTasks ++ " files."
 
         Error ->
-            do  hPutStrLn stderr "Error!"
+            do  putStrLn ""
+                hPutStrLn stderr "Error!"
                 exitFailure
 
 
@@ -40,7 +41,7 @@ barLength = 50.0
 
 renderProgressBar :: Int -> Int -> String
 renderProgressBar complete total =
-    "[" ++ replicate numDone '=' ++ replicate numLeft ' ' ++ "] - " ++ show complete ++ "/" ++ show total
+    "[" ++ replicate numDone '=' ++ replicate numLeft ' ' ++ "] - " ++ show complete ++ " / " ++ show total
     where
         fraction = fromIntegral complete / fromIntegral total
         numDone = truncate (fraction * barLength)
