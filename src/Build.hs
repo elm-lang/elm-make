@@ -94,8 +94,8 @@ numIncompleteTasks state =
 build :: Int -> Map.Map ModuleID [ModuleID] -> BuildSummary -> IO ()
 build numProcessors dependencies summary =
   do  env <- initEnv numProcessors dependencies summary
-      Display.display (displayChan env) 0
-      buildManager env (initState summary)
+      forkIO (buildManager env (initState summary))
+      Display.display (displayChan env) 0 (numTasks env)
 
 
 buildManager :: Env -> State -> IO ()
@@ -118,10 +118,10 @@ buildManager env state =
       do  threadIds <-
               forM runNow $ \(name, location, interfaces) ->
                   forkIO (buildModule (resultChan env) name location interfaces)
-          Chan.writeChan (displayChan env) (Display.Progress progress)
           buildManager env $
               state
-              { activeThreads = foldr Set.insert (activeThreads state) threadIds
+              { currentState = Wait
+              , activeThreads = foldr Set.insert (activeThreads state) threadIds
               , readyQueue = runLater
               }
       where
@@ -189,6 +189,6 @@ buildModule
     -> Map.Map ModuleID Module.Interface
     -> IO ()
 buildModule completionChan moduleName location interfaces =
-    do  interface <- (error "not sure how to build yet") moduleName
+    do  interface <- return undefined -- location interfaces
         threadId <- myThreadId
         Chan.writeChan completionChan (Success moduleName interface threadId)
