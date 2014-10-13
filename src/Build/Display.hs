@@ -4,10 +4,12 @@ import qualified Control.Concurrent.Chan as Chan
 import System.Exit (exitFailure)
 import System.IO (hFlush, hPutStrLn, stderr, stdout)
 import qualified Elm.Compiler.Module as Module
+import TheMasterPlan (ModuleID(ModuleID))
+
 
 data Update
     = Progress Float
-    | Completion Module.Name
+    | Completion ModuleID
     | Success
     | Error
 
@@ -22,7 +24,7 @@ display updates progress =
         Progress newProgress ->
             display updates newProgress
 
-        Completion name ->
+        Completion (ModuleID _pkg name) ->
             do  putStrLn $ "Done with " ++ Module.nameToString name
                 display updates progress
 

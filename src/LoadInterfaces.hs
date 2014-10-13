@@ -174,15 +174,3 @@ showCycle dependencies (name:rest) =
     ([next], remaining) =
         List.partition (`elem` rest) (dependencies Map.! name)
 
-
--- REVERSE GRAPHS -- help us reverse dependencies, "who depends on me?"
-
-reverseGraph :: (Ord a) => Map.Map a [a] -> Map.Map a [a]
-reverseGraph graph =
-    Map.foldrWithKey flipEdges Map.empty graph
-  where
-    flipEdges name dependencies reversedGraph =
-        foldr (insertDependency name) reversedGraph dependencies
-
-    insertDependency name dep reversedGraph =
-        Map.insertWith (++) dep [name] reversedGraph

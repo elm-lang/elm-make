@@ -4,7 +4,6 @@ module Build where
 import Control.Concurrent (ThreadId, myThreadId, forkIO, killThread)
 import qualified Control.Concurrent.Chan as Chan
 import Control.Monad (forM)
-import Control.Monad.Error (MonadError, MonadIO)
 import qualified Data.List as List
 import Data.Map ((!))
 import qualified Data.Map as Map
@@ -13,8 +12,8 @@ import qualified Data.Set as Set
 
 import qualified Build.Display as Display
 import qualified Elm.Compiler.Module as Module
-import qualified Prep
 import qualified Utils.Queue as Queue
+import TheMasterPlan (ModuleID, Location, BuildSummary, BuildData(..))
 
 
 data Env = Env
@@ -22,58 +21,75 @@ data Env = Env
     , numTasks :: Int
     , resultChan :: Chan.Chan Result
     , displayChan :: Chan.Chan Display.Update
-    , freeMap :: Map.Map Module.Name [Module.Name]
+    , reverseDependencies :: Map.Map ModuleID [ModuleID]
     }
-
-initEnv :: Int -> Map.Map Module.Name [Module.Name] -> IO Env
-initEnv numProcessors dependencies =
-  do  resultChan <- Chan.newChan
-      displayChan <- Chan.newChan
-      return $ Env {
-          maxActiveThreads = numProcessors,
-          numTasks = Map.size dependencies,
-          resultChan = resultChan,
-          displayChan = displayChan,
-          freeMap = Prep.reverseGraph dependencies
-      }
-
 
 data State = State
     { currentState :: CurrentState
     , activeThreads :: Set.Set ThreadId
-    , readyQueue :: Queue.Queue (Module.Name, [Module.Interface])
-    , waitingModules :: WaitingModules
+    , readyQueue :: Queue.Queue (ModuleID, Location, Map.Map ModuleID Module.Interface)
+    , buildSummary :: BuildSummary
     }
-
-type WaitingModules =
-    Map.Map Module.Name ([Module.Name], [Module.Interface])
 
 data CurrentState = Wait | Update
 
+data Result
+    = Error
+    | Success ModuleID Module.Interface ThreadId
 
-initState
-    :: (MonadIO m, MonadError String m)
-    => m State
-initState =
-  do  
-      return $ State {
-          currentState = Update,
-          activeThreads = Set.empty,
-          readyQueue = Queue.fromList undefined,
-          waitingModules = undefined
+
+-- HELPERS for ENV and STATE
+
+initEnv :: Int -> Map.Map ModuleID [ModuleID] -> BuildSummary -> IO Env
+initEnv numProcessors dependencies summary =
+  do  resultChan <- Chan.newChan
+      displayChan <- Chan.newChan
+      return $ Env {
+          maxActiveThreads = numProcessors,
+          numTasks = Map.size summary,
+          resultChan = resultChan,
+          displayChan = displayChan,
+          reverseDependencies = reverseGraph dependencies
       }
+
+-- reverse dependencies, "who depends on me?"
+reverseGraph :: (Ord a) => Map.Map a [a] -> Map.Map a [a]
+reverseGraph graph =
+    Map.foldrWithKey flipEdges Map.empty graph
+  where
+    flipEdges name dependencies reversedGraph =
+        foldr (insertDependency name) reversedGraph dependencies
+
+    insertDependency name dep reversedGraph =
+        Map.insertWith (++) dep [name] reversedGraph
+
+
+initState :: BuildSummary -> State
+initState summary =
+    State {
+        currentState = Update,
+        activeThreads = Set.empty,
+        readyQueue = Queue.fromList (Map.elems readyModules),
+        buildSummary = blockedModules
+    }
+  where
+    (readyModules, blockedModules) =
+        Map.mapEitherWithKey categorize summary
+
+    categorize name buildData@(BuildData blocking ready location) =
+        case blocking of
+          [] -> Left (name, location, ready)
+          _  -> Right buildData
 
 
 numIncompleteTasks :: State -> Int
 numIncompleteTasks state =
     Set.size (activeThreads state)
     + Queue.size (readyQueue state)
-    + Map.size (waitingModules state)
+    + Map.size (buildSummary state)
 
-data Result
-    = Error
-    | Success Module.Name Module.Interface ThreadId
 
+-- PARALLEL BUILDS!!!
 
 build :: IO ()
 build =
@@ -100,8 +116,8 @@ buildManager env state =
 
     Update ->
       do  threadIds <-
-              forM runNow $ \(name, interfaces) ->
-                  forkIO (buildModule (resultChan env) name interfaces)
+              forM runNow $ \(name, location, interfaces) ->
+                  forkIO (buildModule (resultChan env) name location interfaces)
           Chan.writeChan (displayChan env) (Display.Progress progress)
           buildManager env $
               state
@@ -120,54 +136,59 @@ buildManager env state =
 
 -- WAIT - REGISTER RESULTS
 
-registerSuccess :: Env -> State -> Module.Name -> Module.Interface -> ThreadId -> State
+registerSuccess :: Env -> State -> ModuleID -> Module.Interface -> ThreadId -> State
 registerSuccess env state name interface threadId =
     state
     { currentState = Update
     , activeThreads = Set.delete threadId (activeThreads state)
-    , waitingModules = updatedWaitingModules
+    , buildSummary = updatedBuildSummary
     , readyQueue = Queue.enqueue (Maybe.catMaybes readyModules) (readyQueue state)
     }
   where
-    (updatedWaitingModules, readyModules) =
+    (updatedBuildSummary, readyModules) =
         List.mapAccumR
-            (updateWaitingModules name interface)
-            (waitingModules state)
-            (freeMap env ! name)
+            (updateBuildSummary name interface)
+            (buildSummary state)
+            (reverseDependencies env ! name)
 
 
-updateWaitingModules
-    :: Module.Name
+updateBuildSummary
+    :: ModuleID
     -> Module.Interface
-    -> WaitingModules
-    -> Module.Name
-    -> (WaitingModules, Maybe (Module.Name, [Module.Interface]))
-updateWaitingModules name interface waitingModules potentiallyFreedModule =
-  case Map.lookup potentiallyFreedModule waitingModules of
+    -> BuildSummary
+    -> ModuleID
+    -> (BuildSummary, Maybe (ModuleID, Location, Map.Map ModuleID Module.Interface))
+updateBuildSummary name interface buildSummary potentiallyFreedModule =
+  case Map.lookup potentiallyFreedModule buildSummary of
     Nothing ->
-        (waitingModules, Nothing)
+        (buildSummary, Nothing)
 
-    Just (blockingModules, interfaces) ->
-        case filter (/= name) blockingModules of
+    Just (BuildData blocking ready location) ->
+          let newReady = Map.insert name interface ready in
+          case filter (/= name) blocking of
           [] ->
-              ( Map.delete potentiallyFreedModule waitingModules
-              , Just (potentiallyFreedModule, interface : interfaces)
+              ( Map.delete potentiallyFreedModule buildSummary
+              , Just (potentiallyFreedModule, location, newReady)
               )
 
-          updatedBlockingModules ->
-              ( updatedWaitingModules, Nothing )
-            where
-              updatedWaitingModules =
-                  Map.insert
-                      potentiallyFreedModule
-                      (updatedBlockingModules, interface : interfaces)
-                      waitingModules
+          newBlocking ->
+              ( Map.insert
+                  potentiallyFreedModule
+                  (BuildData newBlocking newReady location)
+                  buildSummary
+              , Nothing
+              )
 
 
 -- UPDATE - BUILD SOME MODULES
 
-buildModule :: Chan.Chan Result -> Module.Name -> [Module.Interface] -> IO ()
-buildModule completionChan moduleName interfaces =
+buildModule
+    :: Chan.Chan Result
+    -> ModuleID
+    -> Location
+    -> Map.Map ModuleID Module.Interface
+    -> IO ()
+buildModule completionChan moduleName location interfaces =
     do  interface <- (error "not sure how to build yet") moduleName
         threadId <- myThreadId
         Chan.writeChan completionChan (Success moduleName interface threadId)

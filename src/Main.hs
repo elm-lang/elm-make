@@ -2,7 +2,7 @@ module Main where
 
 import GHC.Conc (getNumProcessors, setNumCapabilities)
 
---import qualified Build
+import qualified Build
 import qualified CrawlPackage
 import qualified CrawlProject
 import qualified LoadInterfaces
