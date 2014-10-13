@@ -3,7 +3,6 @@ module CrawlPackage where
 
 import Control.Monad (forM)
 import Control.Monad.Error (MonadError, MonadIO, liftIO, throwError)
-import Data.Map ((!))
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import System.Directory (doesFileExist, getCurrentDirectory, setCurrentDirectory)
@@ -135,16 +134,29 @@ readAvailableForeignModules
     -> Solution.Solution
     -> m (Map.Map Module.Name [Pkg.Name])
 readAvailableForeignModules desc solution =
-  do  rawLocations <-
-          mapM exposedModules (allVisible desc solution)
+  do  visiblePackages <- allVisible desc solution
+      rawLocations <- mapM exposedModules visiblePackages
       return (Map.unionsWith (++) rawLocations)
 
 
-allVisible :: Desc.Description -> Solution.Solution -> [(Pkg.Name, V.Version)]
+allVisible
+    :: (MonadError String m)
+    => Desc.Description
+    -> Solution.Solution
+    -> m [(Pkg.Name, V.Version)]
 allVisible desc solution =
-    map (\name -> (name, solution ! name)) visible
+    mapM getVersion visible
   where
     visible = map fst (Desc.dependencies desc)
+    getVersion name =
+        case Map.lookup name solution of
+          Just version -> return (name, version)
+          Nothing ->
+            throwError $
+            unlines
+            [ "your " ++ Path.description ++ " file says you depend on package " ++ Pkg.toString name ++ ","
+            , "but it looks like it is not properly installed. Try running 'elm-package install'."
+            ]
 
 
 exposedModules
