@@ -64,7 +64,7 @@ data Location = Location
     }
 
 
--- SUMMARY OF A PROJECT
+-- BUILD-FRIENDLY SUMMARY
 
 {-| Combines the ProjectSummary with all cached build information. At this
 stage we crawl any cached interface files. File changes may have invalidated
