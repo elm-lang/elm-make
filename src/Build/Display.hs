@@ -8,28 +8,24 @@ import TheMasterPlan (ModuleID(ModuleID))
 
 
 data Update
-    = Progress Float
-    | Completion ModuleID
+    = Completion ModuleID
     | Success
     | Error
 
 
-display :: Chan.Chan Update -> Float -> IO ()
-display updates progress =
-  do  putStr (renderProgressBar progress)
+display :: Chan.Chan Update -> Int -> Int -> IO ()
+display updates completeTasks totalTasks =
+  do  putStr (renderProgressBar completeTasks totalTasks)
       hFlush stdout
       update <- Chan.readChan updates
       putStr clearProgressBar
       case update of
-        Progress newProgress ->
-            display updates newProgress
-
         Completion (ModuleID _pkg name) ->
             do  putStrLn $ "Done with " ++ Module.nameToString name
-                display updates progress
+                display updates (completeTasks + 1) totalTasks
 
         Success ->
-            putStrLn "Success!"
+            putStrLn $ "Success! Compiled " ++ show completeTasks ++ " files."
 
         Error ->
             do  hPutStrLn stderr "Error!"
@@ -42,10 +38,11 @@ barLength :: Float
 barLength = 50.0
 
 
-renderProgressBar :: Float -> String
-renderProgressBar fraction =
-    "[" ++ replicate numDone '=' ++ replicate numLeft ' ' ++ "] - " ++ show percent ++ "%"
+renderProgressBar :: Int -> Int -> String
+renderProgressBar complete total =
+    "[" ++ replicate numDone '=' ++ replicate numLeft ' ' ++ "] - " ++ show complete ++ "/" ++ show total
     where
+        fraction = fromIntegral complete / fromIntegral total
         numDone = truncate (fraction * barLength)
         numLeft = truncate barLength - numDone
         percent = truncate (fraction * 100)
@@ -53,4 +50,4 @@ renderProgressBar fraction =
 
 clearProgressBar :: String
 clearProgressBar =
-    '\r' : replicate (length (renderProgressBar 1)) ' ' ++ "\r"
+    '\r' : replicate (length (renderProgressBar 99999 99999)) ' ' ++ "\r"
