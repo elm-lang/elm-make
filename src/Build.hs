@@ -5,7 +5,6 @@ import Control.Concurrent (ThreadId, myThreadId, forkIO, killThread)
 import qualified Control.Concurrent.Chan as Chan
 import Control.Monad (forM)
 import qualified Data.List as List
-import Data.Map ((!))
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import qualified Data.Set as Set
@@ -149,7 +148,7 @@ registerSuccess env state name interface threadId =
         List.mapAccumR
             (updateBuildSummary name interface)
             (buildSummary state)
-            (reverseDependencies env ! name)
+            (Maybe.fromMaybe [] (Map.lookup name (reverseDependencies env)))
 
 
 updateBuildSummary
