@@ -4,7 +4,6 @@ module CrawlProject where
 import qualified Data.Map as Map
 
 import qualified Elm.Compiler.Module as Module
-import qualified Elm.Package.Name as Pkg
 import TheMasterPlan
     ( ModuleID(ModuleID), PackageID, Location(Location)
     , PackageSummary(..), PackageData(..)

@@ -10,7 +10,7 @@ import TheMasterPlan (ModuleID(ModuleID))
 data Update
     = Completion ModuleID
     | Success
-    | Error
+    | Error String
 
 
 display :: Chan.Chan Update -> Int -> Int -> IO ()
@@ -27,9 +27,8 @@ display updates completeTasks totalTasks =
         Success ->
             putStrLn $ "Success! Compiled " ++ show completeTasks ++ " files."
 
-        Error ->
-            do  putStrLn ""
-                hPutStrLn stderr "Error!"
+        Error msg ->
+            do  hPutStrLn stderr ("Error: " ++ msg)
                 exitFailure
 
 

@@ -11,10 +11,11 @@ import qualified Data.Maybe as Maybe
 import qualified Data.Set as Set
 
 import qualified Build.Display as Display
+import qualified Elm.Compiler as Compiler
 import qualified Elm.Compiler.Module as Module
 import qualified Path
 import qualified Utils.Queue as Queue
-import TheMasterPlan (ModuleID, Location, BuildSummary, BuildData(..))
+import TheMasterPlan (ModuleID(ModuleID), Location, BuildSummary, BuildData(..))
 
 
 data Env = Env
@@ -35,7 +36,7 @@ data State = State
 data CurrentState = Wait | Update
 
 data Result
-    = Error
+    = Error String
     | Success ModuleID Module.Interface ThreadId
 
 
@@ -111,9 +112,9 @@ buildManager env state =
             Success name interface threadId ->
               do  Chan.writeChan (displayChan env) (Display.Completion name)
                   buildManager env (registerSuccess env state name interface threadId)
-            Error ->
+            Error msg ->
               do  mapM killThread (Set.toList (activeThreads state))
-                  Chan.writeChan (displayChan env) Display.Error
+                  Chan.writeChan (displayChan env) (Display.Error msg)
 
     Update ->
       do  threadIds <-
@@ -194,10 +195,17 @@ buildModule completionChan moduleName location interfaces =
   where
     compile =
       do  source <- readFile (Path.fromLocation location)
-          interface <- return undefined -- Compiler.compile interfaces source
-          threadId <- myThreadId
-          Chan.writeChan completionChan (Success moduleName interface threadId)
+          let ifaces = Map.mapKeysMonotonic (\(ModuleID name _pkg) -> name) interfaces
+          let rawResult = Compiler.compile source ifaces
+          result <-
+              case rawResult of
+                Left errorMsg -> return (Error errorMsg)
+                Right interface ->
+                  do  threadId <- myThreadId
+                      return (Success moduleName interface threadId)
+
+          Chan.writeChan completionChan result
 
     recover :: Exception.SomeException -> IO ()
     recover msg =
-      Chan.writeChan completionChan Error
+      Chan.writeChan completionChan (Error (show msg))
