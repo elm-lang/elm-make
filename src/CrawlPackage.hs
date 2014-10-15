@@ -51,7 +51,10 @@ crawl root solution maybeFilePath =
 
 dfsDependencies
     :: (MonadIO m, MonadError String m)
-    => [Module.Name] -> Env -> PackageSummary -> m PackageSummary
+    => [Module.Name]
+    -> Env
+    -> PackageSummary
+    -> m PackageSummary
 
 dfsDependencies [] _env summary =
     return summary
@@ -84,7 +87,12 @@ dfsDependencies (name:unvisited) env summary =
 
 dfsFile
     :: (MonadIO m, MonadError String m)
-    => FilePath -> Maybe Module.Name -> [Module.Name] -> Env -> PackageSummary -> m PackageSummary
+    => FilePath
+    -> Maybe Module.Name
+    -> [Module.Name]
+    -> Env
+    -> PackageSummary
+    -> m PackageSummary
 
 dfsFile filePath maybeName unvisited env summary =
   do  source <- liftIO (readFile filePath)
