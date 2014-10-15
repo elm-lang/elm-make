@@ -26,12 +26,16 @@ enqueue names (Queue (front, back)) =
 
 
 dequeue :: Int -> Queue a -> ([a], Queue a)
-dequeue n (Queue (front, back)) =
-    case splitAt n front of
-        (names, []) ->
-            let (names', front') = splitAt (length names) (reverse back)
-            in
-                (names ++ names', Queue (front', []))
+dequeue n queue =
+    dequeueHelp [] n queue
 
-        (names, front') ->
-            (names, Queue (front', back))
+
+dequeueHelp :: [a] -> Int -> Queue a -> ([a], Queue a)
+dequeueHelp results n queue@(Queue (front, back)) =
+  case n of
+    0 -> (results, queue)
+    _ ->
+      case (front, back) of
+        ([],  []) -> (results, queue)
+        ([],   _) -> dequeueHelp results n (Queue (reverse back, []))
+        (x:xs, _) -> dequeueHelp (x:results) (n-1) (Queue (xs, back))
