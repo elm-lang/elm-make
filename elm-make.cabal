@@ -47,7 +47,7 @@ Executable elm-make
         base >=4.2 && <5,
         containers >= 0.3,
         directory,
-        Elm,
+        elm-compiler >= 0.13,
         elm-package,
         filepath,
         mtl,
