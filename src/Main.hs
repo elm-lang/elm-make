@@ -14,11 +14,10 @@ import qualified CrawlPackage
 import qualified CrawlProject
 import qualified LoadInterfaces
 import qualified Options
-import qualified Elm.Package.Name as Pkg
 import qualified Elm.Package.Paths as Path
 import qualified Elm.Package.Solution as Solution
 import qualified Path as BuildPath
-import TheMasterPlan (PackageID(..), Location, ProjectSummary(..), ProjectData(..))
+import TheMasterPlan (Location, ProjectSummary, ProjectData(..))
 
 
 main :: IO ()
