@@ -7,6 +7,7 @@ import qualified Data.Graph as Graph
 import qualified Data.List as List
 import Data.Map ((!))
 import qualified Data.Map as Map
+import qualified Data.Maybe as Maybe
 import System.Directory (doesFileExist, getModificationTime)
 
 import qualified Elm.Compiler.Module as Module
@@ -14,7 +15,7 @@ import qualified Path
 import TheMasterPlan
     ( ModuleID(ModuleID), Location(..)
     , ProjectSummary(ProjectSummary), ProjectData(..)
-    , BuildSummary, BuildData(..)
+    , BuildSummary(..), BuildData(..)
     )
 
 
@@ -22,10 +23,10 @@ prepForBuild
     :: (MonadIO m, MonadError String m, MonadReader FilePath m)
     => ProjectSummary Location
     -> m BuildSummary
-prepForBuild (ProjectSummary projectData projectNatives) =
+prepForBuild (ProjectSummary projectData _projectNatives) =
   do  enhancedData <- addInterfaces projectData
       filteredData <- filterStaleInterfaces enhancedData
-      return (enrichDependencies filteredData)
+      return (toBuildSummary filteredData)
 
 
 --- LOAD INTERFACES -- what has already been compiled?
@@ -110,47 +111,61 @@ haveInterface enhancedSummary name =
       (_, Nothing) -> False
 
 
--- ENRICH DEPENDENCIES -- augment dependencies based on available interfaces
+-- FILTER DEPENDENCIES -- which modules actually need to be compiled?
 
-enrichDependencies
+toBuildSummary
     :: Map.Map ModuleID (ProjectData (Either Location Module.Interface))
     -> BuildSummary
-enrichDependencies summary =
-    Map.mapMaybe (enrich summary) summary
-
-
-enrich
-    :: Map.Map ModuleID (ProjectData (Either Location Module.Interface))
-    -> ProjectData (Either Location Module.Interface)
-    -> Maybe BuildData
-enrich projectSummary (ProjectData trueLocation dependencies) =
-  case trueLocation of
-    Right _ -> Nothing
-    Left location ->
-        Just (BuildData blocking ready location)
-
+toBuildSummary summary =
+    BuildSummary
+    { blockedModules = Map.map (toBuildData interfaces) locations
+    , completedInterfaces = interfaces
+    }
   where
-    (blocking, ready) =
-        List.foldl' insert ([], Map.empty) (filterNativeDependencies dependencies)
+    (locations, interfaces) =
+        Map.mapEither divide summary
 
-    insert (blocking, ready) name =
-        case projectLocation `fmap` Map.lookup name projectSummary of
-          Just (Right interface) ->
-              (blocking, Map.insert name interface ready)
-          _ ->
-              (name : blocking, ready)
+    divide (ProjectData either deps) =
+        case either of
+          Left location ->
+              Left (ProjectData location deps)
+
+          Right interface ->
+              Right interface
+
+toBuildData
+    :: Map.Map ModuleID Module.Interface
+    -> ProjectData Location
+    -> BuildData
+toBuildData interfaces (ProjectData location dependencies) =
+    BuildData blocking location
+  where
+    blocking =
+        Maybe.mapMaybe filterDeps dependencies
+
+    filterDeps :: ModuleID -> Maybe ModuleID
+    filterDeps deps =
+        filterCachedDeps interfaces =<< filterNativeDeps deps
 
 
-filterNativeDependencies :: [ModuleID] -> [ModuleID]
-filterNativeDependencies names =
-    case names of
-      [] -> []
+filterCachedDeps
+    :: Map.Map ModuleID Module.Interface
+    -> ModuleID
+    -> Maybe ModuleID
+filterCachedDeps interfaces name =
+    case Map.lookup name interfaces of
+      Just _interface -> Nothing
+      Nothing -> Just name
 
-      (ModuleID (Module.Name ("Native" : _)) _pkg) : rest ->
-          filterNativeDependencies rest
 
-      name : rest ->
-          name : filterNativeDependencies rest
+filterNativeDeps :: ModuleID -> Maybe ModuleID
+filterNativeDeps name =
+    case name of
+      ModuleID (Module.Name ("Native" : _)) _pkg ->
+          Nothing
+
+      _ ->
+          Just name
 
 
 -- SORT GRAPHS / CHECK FOR CYCLES

@@ -78,23 +78,23 @@ these cached interfaces, so we filter out any stale interfaces.
 
 The resulting format is very convenient for managing parallel builds.
 -}
-type BuildSummary =
-    Map.Map ModuleID BuildData
+data BuildSummary = BuildSummary
+    { blockedModules :: Map.Map ModuleID BuildData
+    , completedInterfaces :: Map.Map ModuleID Module.Interface
+    }
 
 
 {-| Everything you need to know to build a file.
 
   * blocking - modules I depend upon that are not ready yet
-  * ready - modules I depend upon that are ready to go
   * location - location of source code for when its time to compile
 
-We move modules from 'blocking' to 'ready' as the build progresses and
-interfaces are produced. When 'blocking' is empty, it is safe to add this
-module to the build queue.
+We remove modules from 'blocking' as the build progresses and interfaces are
+produced. When 'blocking' is empty, it is safe to add this module to the build
+queue.
 -}
 data BuildData = BuildData
     { blocking :: [ModuleID]
-    , ready :: Map.Map ModuleID Module.Interface
     , location :: Location
     }
 
