@@ -4,6 +4,7 @@ module Main where
 import Control.Monad (forM)
 import Control.Monad.Error (MonadError, runErrorT, MonadIO, liftIO)
 import Control.Monad.Reader (MonadReader, runReaderT)
+import qualified Data.List as List
 import qualified Data.Map as Map
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
@@ -17,7 +18,7 @@ import qualified Options
 import qualified Elm.Package.Paths as Path
 import qualified Elm.Package.Solution as Solution
 import qualified Path as BuildPath
-import TheMasterPlan (Location, ProjectSummary, ProjectData(..))
+import TheMasterPlan (Location, ProjectSummary(..), ProjectData(..))
 
 
 main :: IO ()
@@ -41,7 +42,7 @@ run =
       liftIO (setNumCapabilities numProcessors)
 
       projectSummary <- crawl
-      let dependencies = Map.map projectDependencies projectSummary
+      let dependencies = Map.map projectDependencies (projectData projectSummary)
       buildSummary <- LoadInterfaces.prepForBuild projectSummary
 
       liftIO (Build.build numProcessors dependencies buildSummary)
@@ -60,4 +61,4 @@ crawl =
           do  packageSummary <- CrawlPackage.crawl "." solution Nothing
               return (CrawlProject.canonicalizePackageSummary Nothing packageSummary)
 
-      return (Map.unions (summary : summaries))
+      return (List.foldl1 CrawlProject.union (summary : summaries))

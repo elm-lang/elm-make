@@ -13,7 +13,7 @@ import qualified Elm.Compiler.Module as Module
 import qualified Path
 import TheMasterPlan
     ( ModuleID(ModuleID), Location(..)
-    , ProjectSummary, ProjectData(..)
+    , ProjectSummary(ProjectSummary), ProjectData(..)
     , BuildSummary, BuildData(..)
     )
 
@@ -22,21 +22,21 @@ prepForBuild
     :: (MonadIO m, MonadError String m, MonadReader FilePath m)
     => ProjectSummary Location
     -> m BuildSummary
-prepForBuild projectSummary =
-  do  enhancedSummary <- addInterfaces projectSummary
-      filteredSummary <- filterStaleInterfaces enhancedSummary
-      return (enrichDependencies filteredSummary)
+prepForBuild (ProjectSummary projectData projectNatives) =
+  do  enhancedData <- addInterfaces projectData
+      filteredData <- filterStaleInterfaces enhancedData
+      return (enrichDependencies filteredData)
 
 
 --- LOAD INTERFACES -- what has already been compiled?
 
 addInterfaces
     :: (MonadIO m, MonadReader FilePath m)
-    => ProjectSummary Location
-    -> m (ProjectSummary (Location, Maybe Module.Interface))
-addInterfaces projectSummary =
-  do  enhancedSummary <- mapM maybeLoadInterface (Map.toList projectSummary)
-      return (Map.fromList enhancedSummary)
+    => Map.Map ModuleID (ProjectData Location)
+    -> m (Map.Map ModuleID (ProjectData (Location, Maybe Module.Interface)))
+addInterfaces projectData =
+  do  enhancedData <- mapM maybeLoadInterface (Map.toList projectData)
+      return (Map.fromList enhancedData)
       
 
 maybeLoadInterface
@@ -73,18 +73,18 @@ isFresh sourcePath interfacePath =
 
 filterStaleInterfaces
     :: (MonadError String m)
-    => ProjectSummary (Location, Maybe Module.Interface)
-    -> m (ProjectSummary (Either Location Module.Interface))
+    => Map.Map ModuleID (ProjectData (Location, Maybe Module.Interface))
+    -> m (Map.Map ModuleID (ProjectData (Either Location Module.Interface)))
 filterStaleInterfaces summary =
   do  sortedNames <- topologicalSort (Map.map projectDependencies summary)
       return (List.foldl' (filterIfStale summary) Map.empty sortedNames)
 
 
 filterIfStale
-    :: ProjectSummary (Location, Maybe Module.Interface)
-    -> ProjectSummary (Either Location Module.Interface)
+    :: Map.Map ModuleID (ProjectData (Location, Maybe Module.Interface))
+    -> Map.Map ModuleID (ProjectData (Either Location Module.Interface))
     -> ModuleID
-    -> ProjectSummary (Either Location Module.Interface)
+    -> Map.Map ModuleID (ProjectData (Either Location Module.Interface))
 filterIfStale enhancedSummary filteredSummary moduleName =
     Map.insert moduleName (ProjectData trueLocation deps) filteredSummary
   where
@@ -101,7 +101,7 @@ filterIfStale enhancedSummary filteredSummary moduleName =
 
 
 haveInterface
-    :: ProjectSummary (Location, Maybe Module.Interface)
+    :: Map.Map ModuleID (ProjectData (Location, Maybe Module.Interface))
     -> ModuleID
     -> Bool
 haveInterface enhancedSummary name =
@@ -113,14 +113,14 @@ haveInterface enhancedSummary name =
 -- ENRICH DEPENDENCIES -- augment dependencies based on available interfaces
 
 enrichDependencies
-    :: ProjectSummary (Either Location Module.Interface)
+    :: Map.Map ModuleID (ProjectData (Either Location Module.Interface))
     -> BuildSummary
 enrichDependencies summary =
     Map.mapMaybe (enrich summary) summary
 
 
 enrich
-    :: ProjectSummary (Either Location Module.Interface)
+    :: Map.Map ModuleID (ProjectData (Either Location Module.Interface))
     -> ProjectData (Either Location Module.Interface)
     -> Maybe BuildData
 enrich projectSummary (ProjectData trueLocation dependencies) =
@@ -131,7 +131,7 @@ enrich projectSummary (ProjectData trueLocation dependencies) =
 
   where
     (blocking, ready) =
-        List.foldl' insert ([], Map.empty) dependencies
+        List.foldl' insert ([], Map.empty) (filterNativeDependencies dependencies)
 
     insert (blocking, ready) name =
         case projectLocation `fmap` Map.lookup name projectSummary of
@@ -139,6 +139,18 @@ enrich projectSummary (ProjectData trueLocation dependencies) =
               (blocking, Map.insert name interface ready)
           _ ->
               (name : blocking, ready)
+
+
+filterNativeDependencies :: [ModuleID] -> [ModuleID]
+filterNativeDependencies names =
+    case names of
+      [] -> []
+
+      (ModuleID (Module.Name ("Native" : _)) _pkg) : rest ->
+          filterNativeDependencies rest
+
+      name : rest ->
+          name : filterNativeDependencies rest
 
 
 -- SORT GRAPHS / CHECK FOR CYCLES

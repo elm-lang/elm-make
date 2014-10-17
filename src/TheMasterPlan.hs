@@ -37,6 +37,7 @@ file or package description.
 -}
 data PackageSummary = PackageSummary
     { packageData :: Map.Map Module.Name PackageData
+    , packageNatives :: Map.Map Module.Name FilePath
     , packageForeignDependencies :: Map.Map Module.Name PackageID
     }
 
@@ -53,8 +54,10 @@ unique by adding which package it comes from. This makes it safe to merge a
 bunch of PackageSummaries together, so we can write the rest of our code
 without thinking about package boundaries.
 -}
-type ProjectSummary a =
-    Map.Map ModuleID (ProjectData a)
+data ProjectSummary a = ProjectSummary
+    { projectData :: Map.Map ModuleID (ProjectData a)
+    , projectNatives :: Map.Map ModuleID Location
+    }
 
 data ProjectData a = ProjectData
     { projectLocation :: a

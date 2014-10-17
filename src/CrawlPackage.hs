@@ -15,7 +15,7 @@ import qualified Elm.Package.Name as Pkg
 import qualified Elm.Package.Paths as Path
 import qualified Elm.Package.Solution as Solution
 import qualified Elm.Package.Version as V
-import TheMasterPlan (PackageID, PackageSummary(..), PackageData(..))
+import TheMasterPlan ( PackageID, PackageSummary(..), PackageData(..) )
 
 
 -- STATE and ENVIRONMENT
@@ -27,7 +27,7 @@ data Env = Env
 
 emptyPackageSummary :: PackageSummary
 emptyPackageSummary =
-    PackageSummary Map.empty Map.empty
+    PackageSummary Map.empty Map.empty Map.empty
 
 
 -- GENERIC CRAWLER
@@ -64,10 +64,15 @@ dfsDependencies (name:unvisited) env summary
         dfsDependencies unvisited env summary
 
 dfsDependencies (name:unvisited) env summary =
-  do  filePaths <- find (sourceDirs env) name
+  do  filePaths <- find name (sourceDirs env)
       case (filePaths, Map.lookup name (availableForeignModules env)) of
-        ([filePath], Nothing) ->
+        ([Elm filePath], Nothing) ->
             dfsFile filePath (Just name) unvisited env summary
+
+        ([JS filePath], Nothing) ->
+            dfsDependencies unvisited env $ summary {
+                packageNatives = Map.insert name filePath (packageNatives summary)
+            }
 
         ([], Just [pkg]) ->
             dfsDependencies unvisited env $ summary {
@@ -79,10 +84,7 @@ dfsDependencies (name:unvisited) env summary =
             throwError (errorNotFound name)
 
         (_, maybePkgs) ->
-            throwError (errorTooMany name (paths ++ pkgs))
-          where
-            paths = map ("directory " ++) filePaths
-            pkgs = map ("package " ++) (Maybe.maybe [] (map (Pkg.toString . fst)) maybePkgs)
+            throwError (errorTooMany name filePaths maybePkgs)
 
 
 dfsFile
@@ -108,16 +110,43 @@ dfsFile filePath maybeName unvisited env summary =
 
 -- FIND LOCAL FILE PATH
 
-find :: (MonadIO m) => [FilePath] -> Module.Name -> m [FilePath]
-find sourceDirs moduleName =
-    do  maybeLocations <-
-            forM sourceDirs $ \dir -> do
-                exists <- liftIO $ doesFileExist (dir </> filePath)
-                return (if exists then Just (dir </> filePath) else Nothing)
-        return (Maybe.catMaybes maybeLocations)
+data CodePath = Elm FilePath | JS FilePath
+
+find :: (MonadIO m) => Module.Name -> [FilePath] -> m [CodePath]
+find moduleName sourceDirs =
+    findHelp [] moduleName sourceDirs
+
+findHelp
+    :: (MonadIO m)
+    => [CodePath]
+    -> Module.Name
+    -> [FilePath]
+    -> m [CodePath]
+
+findHelp locations _moduleName [] =
+  return locations
+
+findHelp locations moduleName (dir:srcDirs) =
+  do  updatedLocations <- addJsPath =<< addElmPath locations
+      findHelp updatedLocations moduleName srcDirs
   where
-    filePath =
-        Module.nameToPath moduleName <.> "elm"
+    consIf bool x xs =
+        if bool then x:xs else xs
+
+    addElmPath locs =
+      do  let elmPath = dir </> Module.nameToPath moduleName <.> "elm"
+          elmExists <- liftIO (doesFileExist elmPath)
+          return (consIf elmExists (Elm elmPath) locs)
+
+    addJsPath locs =
+      do  let jsPath = dir </> Module.nameToPath moduleName <.> "js"
+          jsExists <-          
+              case moduleName of
+                Module.Name ("Native" : _) -> liftIO (doesFileExist jsPath)
+                _ -> return False
+
+          return (consIf jsExists (JS jsPath) locs)
+
 
 
 -- CHECK MODULE NAME MATCHES FILE NAME
@@ -203,11 +232,22 @@ errorNotFound name =
     ]
 
 
-errorTooMany :: Module.Name -> [String] -> String
-errorTooMany name searchedList =
+errorTooMany :: Module.Name -> [CodePath] -> Maybe [(Pkg.Name,V.Version)] -> String
+errorTooMany name filePaths maybePkgs =
     "found multiple modules named '" ++ Module.nameToString name ++ "'\n"
     ++ "Modules with that name were found in the following locations:\n\n"
-    ++ concatMap (\str -> "    " ++ str ++ "\n") searchedList
+    ++ concatMap (\str -> "    " ++ str ++ "\n") (paths ++ packages)
+  where
+    packages =
+        map ("package " ++) (Maybe.maybe [] (map (Pkg.toString . fst)) maybePkgs)
+
+    paths =
+        map ("directory " ++) (map extract filePaths)
+
+    extract codePath =
+        case codePath of
+          Elm path -> path
+          JS path -> path
 
 
 errorNameMismatch :: FilePath -> Module.Name -> Module.Name -> String
