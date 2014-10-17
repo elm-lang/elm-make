@@ -2,7 +2,7 @@
 module LoadInterfaces where
 
 import Control.Monad.Error (MonadError, MonadIO, liftIO, throwError)
-import Control.Monad.Reader (MonadReader)
+import Control.Monad.Reader (MonadReader, ask)
 import qualified Data.Graph as Graph
 import qualified Data.List as List
 import Data.Map ((!))
@@ -45,8 +45,9 @@ maybeLoadInterface
     => (ModuleID, ProjectData Location)
     -> m (ModuleID, ProjectData (Location, Maybe Module.Interface))
 maybeLoadInterface (moduleID, (ProjectData location deps)) =
-  do  interfacePath <- Path.fromModuleID moduleID
-      let sourcePath = Path.fromLocation location
+  do  cacheRoot <- ask
+      let interfacePath = Path.toInterface cacheRoot moduleID
+      let sourcePath = Path.toSource location
       fresh <- liftIO (isFresh sourcePath interfacePath)
 
       maybeInterface <-

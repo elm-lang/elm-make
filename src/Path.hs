@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Path where
 
-import Control.Monad.RWS (MonadReader, ask)
+import qualified Data.List as List
 import System.FilePath ((</>), (<.>))
 
 import Elm.Compiler.Module as Module
@@ -10,16 +10,13 @@ import Elm.Package.Version as V
 import TheMasterPlan (ModuleID(ModuleID), Location(Location))
 
 
-fromModuleID :: (MonadReader FilePath m) => ModuleID -> m FilePath
-fromModuleID (ModuleID moduleName package) =
-  do  root <- ask
-      return $ root </> inPackage package (modulePath <.> "elmi")
-  where
-    modulePath = Module.nameToPath moduleName
+toInterface :: FilePath -> ModuleID -> FilePath
+toInterface root (ModuleID (Module.Name names) package) =
+    root </> inPackage package (List.intercalate "-" names <.> "elmi")
 
 
-fromLocation :: Location -> FilePath
-fromLocation (Location relativePath package) =
+toSource :: Location -> FilePath
+toSource (Location relativePath package) =
     inPackage package relativePath
 
 

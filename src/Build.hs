@@ -4,11 +4,15 @@ module Build where
 import Control.Concurrent (ThreadId, myThreadId, forkIO, killThread)
 import qualified Control.Concurrent.Chan as Chan
 import qualified Control.Exception as Exception
-import Control.Monad (forM)
+import qualified Data.Binary as Binary
+import qualified Data.ByteString.Lazy as LBS
 import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import qualified Data.Set as Set
+import System.Directory (createDirectoryIfMissing)
+import System.FilePath (dropFileName)
+import System.IO (withBinaryFile, IOMode(WriteMode))
 
 import qualified Build.Display as Display
 import qualified Elm.Compiler as Compiler
@@ -27,6 +31,7 @@ data Env = Env
     , resultChan :: Chan.Chan Result
     , displayChan :: Chan.Chan Display.Update
     , reverseDependencies :: Map.Map ModuleID [ModuleID]
+    , cachePath :: FilePath
     }
 
 data State = State
@@ -46,8 +51,8 @@ data Result
 
 -- HELPERS for ENV and STATE
 
-initEnv :: Int -> Map.Map ModuleID [ModuleID] -> BuildSummary -> IO Env
-initEnv numProcessors dependencies (BuildSummary blocked _completed) =
+initEnv :: Int -> FilePath -> Map.Map ModuleID [ModuleID] -> BuildSummary -> IO Env
+initEnv numProcessors cachePath dependencies (BuildSummary blocked _completed) =
   do  resultChan <- Chan.newChan
       displayChan <- Chan.newChan
       return $ Env {
@@ -55,7 +60,8 @@ initEnv numProcessors dependencies (BuildSummary blocked _completed) =
           numTasks = Map.size blocked,
           resultChan = resultChan,
           displayChan = displayChan,
-          reverseDependencies = reverseGraph dependencies
+          reverseDependencies = reverseGraph dependencies,
+          cachePath = cachePath
       }
 
 -- reverse dependencies, "who depends on me?"
@@ -98,9 +104,9 @@ numIncompleteTasks state =
 
 -- PARALLEL BUILDS!!!
 
-build :: Int -> Map.Map ModuleID [ModuleID] -> BuildSummary -> IO ()
-build numProcessors dependencies summary =
-  do  env <- initEnv numProcessors dependencies summary
+build :: Int -> FilePath -> Map.Map ModuleID [ModuleID] -> BuildSummary -> IO ()
+build numProcessors cachePath dependencies summary =
+  do  env <- initEnv numProcessors cachePath dependencies summary
       forkIO (buildManager env (initState summary))
       Display.display (displayChan env) 0 (numTasks env)
 
@@ -123,9 +129,8 @@ buildManager env state =
 
     Update ->
       do  let interfaces = completedInterfaces state
-          threadIds <-
-              forM runNow $ \(name, location) ->
-                  forkIO (buildModule (resultChan env) name location interfaces)
+          let compile = buildModule (resultChan env) (cachePath env) interfaces
+          threadIds <- mapM (forkIO . compile) runNow
           buildManager env $
               state
               { currentState = Wait
@@ -197,15 +202,15 @@ updateBlockedModules name interface blockedModules potentiallyFreedModule =
 
 buildModule
     :: Chan.Chan Result
-    -> ModuleID
-    -> Location
+    -> FilePath
     -> Map.Map ModuleID Module.Interface
+    -> (ModuleID, Location)
     -> IO ()
-buildModule completionChan moduleName location interfaces =
+buildModule completionChan cachePath interfaces (moduleName, location) =
     Exception.catch compile recover
   where
     compile =
-      do  source <- readFile (Path.fromLocation location)
+      do  source <- readFile (Path.toSource location)
           let ifaces = Map.mapKeysMonotonic (\(ModuleID name _pkg) -> name) interfaces
           let rawResult = Compiler.compile source ifaces
           result <-
@@ -213,6 +218,7 @@ buildModule completionChan moduleName location interfaces =
                 Left errorMsg -> return (Error moduleName errorMsg)
                 Right interface ->
                   do  threadId <- myThreadId
+                      writeBinary (Path.toInterface cachePath moduleName) interface 
                       return (Success moduleName interface threadId)
 
           Chan.writeChan completionChan result
@@ -220,3 +226,11 @@ buildModule completionChan moduleName location interfaces =
     recover :: Exception.SomeException -> IO ()
     recover msg =
       Chan.writeChan completionChan (Error moduleName (show msg))
+
+
+writeBinary :: (Binary.Binary a) => FilePath -> a -> IO ()
+writeBinary path value =
+  do  let dir = dropFileName path
+      createDirectoryIfMissing True dir
+      withBinaryFile path WriteMode $ \handle ->
+          LBS.hPut handle (Binary.encode value)

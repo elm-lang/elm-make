@@ -3,7 +3,7 @@ module Main where
 
 import Control.Monad (forM)
 import Control.Monad.Error (MonadError, runErrorT, MonadIO, liftIO)
-import Control.Monad.Reader (MonadReader, runReaderT)
+import Control.Monad.Reader (MonadReader, runReaderT, ask)
 import qualified Data.List as List
 import qualified Data.Map as Map
 import System.Exit (exitFailure)
@@ -45,7 +45,8 @@ run =
       let dependencies = Map.map projectDependencies (projectData projectSummary)
       buildSummary <- LoadInterfaces.prepForBuild projectSummary
 
-      liftIO (Build.build numProcessors dependencies buildSummary)
+      cachePath <- ask
+      liftIO (Build.build numProcessors cachePath dependencies buildSummary)
 
 
 crawl :: (MonadIO m, MonadError String m) => m (ProjectSummary Location)

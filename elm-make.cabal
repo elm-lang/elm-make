@@ -45,6 +45,8 @@ Executable elm-make
     Build-depends:
         ansi-wl-pprint,
         base >=4.2 && <5,
+        binary,
+        bytestring,
         containers >= 0.3,
         directory,
         elm-compiler >= 0.13,
