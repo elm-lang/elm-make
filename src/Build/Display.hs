@@ -4,13 +4,15 @@ import qualified Control.Concurrent.Chan as Chan
 import System.Exit (exitFailure)
 import System.IO (hFlush, hPutStrLn, stderr, stdout)
 import qualified Elm.Compiler.Module as Module
-import TheMasterPlan (ModuleID(ModuleID))
+import qualified Elm.Package.Name as Pkg
+import qualified Elm.Package.Version as V
+import TheMasterPlan (ModuleID(ModuleID), PackageID)
 
 
 data Update
     = Completion ModuleID
     | Success
-    | Error String
+    | Error ModuleID String
 
 
 display :: Chan.Chan Update -> Int -> Int -> IO ()
@@ -27,9 +29,24 @@ display updates completeTasks totalTasks =
         Success ->
             putStrLn $ "Success! Compiled " ++ show completeTasks ++ " files."
 
-        Error msg ->
-            do  hPutStrLn stderr ("Error: " ++ msg)
+        Error (ModuleID name pkg) msg ->
+            do  putStrLn ""
+                hPutStrLn stderr (errorMessage name pkg msg)
                 exitFailure
+
+
+-- ERROR MESSAGE
+
+errorMessage :: Module.Name -> Maybe PackageID -> String -> String
+errorMessage name maybePackage msg =
+    "Error when compiling " ++ Module.nameToString name ++ " module"
+    ++ context ++ ":\n" ++ msg
+  where
+    context =
+        case maybePackage of
+          Nothing -> ""
+          Just (pkgName, version) ->
+              " in package " ++ Pkg.toString pkgName ++ " " ++ V.toString version
 
 
 -- PROGRESS BAR
