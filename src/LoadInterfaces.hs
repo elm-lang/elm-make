@@ -107,10 +107,13 @@ haveInterface
     :: Map.Map ModuleID (ProjectData (Location, Maybe Module.Interface))
     -> ModuleID
     -> Bool
-haveInterface enhancedSummary name =
-    case projectLocation (enhancedSummary ! name) of
-      (_, Just _) -> True
-      (_, Nothing) -> False
+haveInterface enhancedSummary rawName =
+    case filterNativeDeps rawName of
+      Nothing -> True
+      Just name ->
+          case Map.lookup name enhancedSummary of
+            Just (ProjectData (_, Just _) _) -> True
+            _ -> False
 
 
 -- FILTER DEPENDENCIES -- which modules actually need to be compiled?
