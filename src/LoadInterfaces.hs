@@ -12,6 +12,7 @@ import System.Directory (doesFileExist, getModificationTime)
 
 import qualified Elm.Compiler.Module as Module
 import qualified Path
+import qualified Utils.File as File
 import TheMasterPlan
     ( ModuleID(ModuleID), Location(..)
     , ProjectSummary(ProjectSummary), ProjectData(..)
@@ -32,7 +33,7 @@ prepForBuild (ProjectSummary projectData _projectNatives) =
 --- LOAD INTERFACES -- what has already been compiled?
 
 addInterfaces
-    :: (MonadIO m, MonadReader FilePath m)
+    :: (MonadIO m, MonadReader FilePath m, MonadError String m)
     => Map.Map ModuleID (ProjectData Location)
     -> m (Map.Map ModuleID (ProjectData (Location, Maybe Module.Interface)))
 addInterfaces projectData =
@@ -41,7 +42,7 @@ addInterfaces projectData =
       
 
 maybeLoadInterface
-    :: (MonadIO m, MonadReader FilePath m)
+    :: (MonadIO m, MonadReader FilePath m, MonadError String m)
     => (ModuleID, ProjectData Location)
     -> m (ModuleID, ProjectData (Location, Maybe Module.Interface))
 maybeLoadInterface (moduleID, (ProjectData location deps)) =
@@ -54,7 +55,7 @@ maybeLoadInterface (moduleID, (ProjectData location deps)) =
           case fresh of
             False -> return Nothing
             True ->
-              do  interface <- (error "Module.readInterface") interfacePath
+              do  interface <- File.readBinary interfacePath
                   return (Just interface)
 
       return (moduleID, ProjectData (location, maybeInterface) deps)

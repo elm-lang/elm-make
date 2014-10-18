@@ -4,20 +4,16 @@ module Build where
 import Control.Concurrent (ThreadId, myThreadId, forkIO, killThread)
 import qualified Control.Concurrent.Chan as Chan
 import qualified Control.Exception as Exception
-import qualified Data.Binary as Binary
-import qualified Data.ByteString.Lazy as LBS
 import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import qualified Data.Set as Set
-import System.Directory (createDirectoryIfMissing)
-import System.FilePath (dropFileName)
-import System.IO (withBinaryFile, IOMode(WriteMode))
 
 import qualified Build.Display as Display
 import qualified Elm.Compiler as Compiler
 import qualified Elm.Compiler.Module as Module
 import qualified Path
+import qualified Utils.File as File
 import qualified Utils.Queue as Queue
 import TheMasterPlan
     ( ModuleID(ModuleID), Location
@@ -218,7 +214,7 @@ buildModule completionChan cachePath interfaces (moduleName, location) =
                 Left errorMsg -> return (Error moduleName errorMsg)
                 Right interface ->
                   do  threadId <- myThreadId
-                      writeBinary (Path.toInterface cachePath moduleName) interface 
+                      File.writeBinary (Path.toInterface cachePath moduleName) interface 
                       return (Success moduleName interface threadId)
 
           Chan.writeChan completionChan result
@@ -226,11 +222,3 @@ buildModule completionChan cachePath interfaces (moduleName, location) =
     recover :: Exception.SomeException -> IO ()
     recover msg =
       Chan.writeChan completionChan (Error moduleName (show msg))
-
-
-writeBinary :: (Binary.Binary a) => FilePath -> a -> IO ()
-writeBinary path value =
-  do  let dir = dropFileName path
-      createDirectoryIfMissing True dir
-      withBinaryFile path WriteMode $ \handle ->
-          LBS.hPut handle (Binary.encode value)
