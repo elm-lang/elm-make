@@ -9,7 +9,7 @@ import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import qualified Data.Set as Set
 
-import qualified Build.Display as Display
+import qualified Display
 import qualified Elm.Compiler as Compiler
 import qualified Elm.Compiler.Module as Module
 import qualified Path
