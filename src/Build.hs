@@ -212,9 +212,10 @@ buildModule completionChan cachePath interfaces (moduleName, location) =
           result <-
               case rawResult of
                 Left errorMsg -> return (Error moduleName errorMsg)
-                Right interface ->
+                Right (interface, js) ->
                   do  threadId <- myThreadId
-                      File.writeBinary (Path.toInterface cachePath moduleName) interface 
+                      File.writeBinary (Path.toInterface cachePath moduleName) interface
+                      writeFile (Path.toObjectFile cachePath moduleName) js
                       return (Success moduleName interface threadId)
 
           Chan.writeChan completionChan result

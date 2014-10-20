@@ -15,6 +15,11 @@ toInterface root (ModuleID (Module.Name names) package) =
     root </> inPackage package (List.intercalate "-" names <.> "elmi")
 
 
+toObjectFile :: FilePath -> ModuleID -> FilePath
+toObjectFile root (ModuleID (Module.Name names) package) =
+    root </> inPackage package (List.intercalate "-" names <.> "elmo")
+
+
 toSource :: Location -> FilePath
 toSource (Location relativePath package) =
     inPackage package relativePath
