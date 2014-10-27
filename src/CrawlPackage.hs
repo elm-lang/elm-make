@@ -44,14 +44,16 @@ crawl root solution maybeFilePath =
         Just path ->
             dfsFile path Nothing [] env emptyPackageSummary
         Nothing ->
-            dfsDependencies (Desc.exposed desc) env emptyPackageSummary
+            let modules = addParent Nothing (Desc.exposed desc)
+            in
+                dfsDependencies modules env emptyPackageSummary
 
 
 -- DEPTH FIRST SEARCH
 
 dfsDependencies
     :: (MonadIO m, MonadError String m)
-    => [Module.Name]
+    => [(Module.Name, Maybe Module.Name)]
     -> Env
     -> PackageSummary
     -> m PackageSummary
@@ -59,11 +61,11 @@ dfsDependencies
 dfsDependencies [] _env summary =
     return summary
 
-dfsDependencies (name:unvisited) env summary
+dfsDependencies ((name,_) : unvisited) env summary
     | Map.member name (packageData summary) =
         dfsDependencies unvisited env summary
 
-dfsDependencies (name:unvisited) env summary =
+dfsDependencies ((name,maybeParent) : unvisited) env summary =
   do  filePaths <- find name (sourceDirs env)
       case (filePaths, Map.lookup name (availableForeignModules env)) of
         ([Elm filePath], Nothing) ->
@@ -81,17 +83,17 @@ dfsDependencies (name:unvisited) env summary =
             }
 
         ([], Nothing) ->
-            throwError (errorNotFound name)
+            throwError (errorNotFound name maybeParent)
 
         (_, maybePkgs) ->
-            throwError (errorTooMany name filePaths maybePkgs)
+            throwError (errorTooMany name maybeParent filePaths maybePkgs)
 
 
 dfsFile
     :: (MonadIO m, MonadError String m)
     => FilePath
     -> Maybe Module.Name
-    -> [Module.Name]
+    -> [(Module.Name, Maybe Module.Name)]
     -> Env
     -> PackageSummary
     -> m PackageSummary
@@ -102,10 +104,15 @@ dfsFile filePath maybeName unvisited env summary =
 
       checkName filePath name maybeName
 
-      dfsDependencies (deps ++ unvisited) env $ summary {
+      dfsDependencies (addParent maybeName deps ++ unvisited) env $ summary {
           packageData =
               Map.insert name (PackageData filePath deps) (packageData summary)
       }
+
+
+addParent :: Maybe Module.Name -> [Module.Name] -> [(Module.Name, Maybe Module.Name)]
+addParent maybeParent names =
+    map (\name -> (name, maybeParent)) names
 
 
 -- FIND LOCAL FILE PATH
@@ -221,23 +228,35 @@ within directory command =
 
 -- ERROR MESSAGES
 
-errorNotFound :: Module.Name -> String
-errorNotFound name =
+errorNotFound :: Module.Name -> Maybe Module.Name -> String
+errorNotFound name maybeParent =
     unlines
-    [ "could not find module '" ++ Module.nameToString name ++ "'"
+    [ "Error when searching for modules" ++ context ++ ":"
+    , "    Could not find module '" ++ Module.nameToString name ++ "'"
     , ""
     , "Potential problems could be:"
     , "  * Misspelled the module name"
     , "  * Need to add a source directory or new dependency to " ++ Path.description
     ]
-
-
-errorTooMany :: Module.Name -> [CodePath] -> Maybe [(Pkg.Name,V.Version)] -> String
-errorTooMany name filePaths maybePkgs =
-    "found multiple modules named '" ++ Module.nameToString name ++ "'\n"
-    ++ "Modules with that name were found in the following locations:\n\n"
-    ++ concatMap (\str -> "    " ++ str ++ "\n") (paths ++ packages)
   where
+    context =
+        case maybeParent of
+          Nothing -> " exposed by " ++ Path.description
+          Just parent -> " imported by module '" ++ Module.nameToString parent ++ "'"
+
+
+errorTooMany :: Module.Name -> Maybe Module.Name -> [CodePath] -> Maybe [(Pkg.Name,V.Version)] -> String
+errorTooMany name maybeParent filePaths maybePkgs =
+    "Error when searching for modules" ++ context ++ ".\n" ++
+    "Found multiple modules named '" ++ Module.nameToString name ++ "'\n" ++
+    "Modules with that name were found in the following locations:\n\n" ++
+    concatMap (\str -> "    " ++ str ++ "\n") (paths ++ packages)
+  where
+    context =
+        case maybeParent of
+          Nothing -> " exposed by " ++ Path.description
+          Just parent -> " imported by module '" ++ Module.nameToString parent ++ "'"
+
     packages =
         map ("package " ++) (Maybe.maybe [] (map (Pkg.toString . fst)) maybePkgs)
 
