@@ -6,9 +6,8 @@ import Control.Monad.Error (MonadError, runErrorT, MonadIO, liftIO)
 import Control.Monad.Reader (MonadReader, runReaderT, ask)
 import qualified Data.List as List
 import qualified Data.Map as Map
-import System.Directory (doesFileExist, createDirectoryIfMissing)
+import System.Directory (doesFileExist)
 import System.Exit (exitFailure)
-import System.FilePath (dropFileName)
 import System.IO (hPutStrLn, stderr)
 import GHC.Conc (getNumProcessors, setNumCapabilities)
 
@@ -17,10 +16,9 @@ import qualified CrawlPackage
 import qualified CrawlProject
 import qualified LoadInterfaces
 import qualified Options
-import qualified Elm.Package.Description as Desc
+import qualified Elm.Package.Initialize as Initialize
 import qualified Elm.Package.Paths as Path
 import qualified Elm.Package.Solution as Solution
-import qualified Elm.Package.Solver as Solver
 import qualified Path as BuildPath
 import TheMasterPlan (Location, ProjectSummary(..), ProjectData(..))
 
@@ -79,18 +77,11 @@ getSolution =
     attemptToGenerate =
         do  exists <- liftIO (doesFileExist Path.description)
             case exists of
-              False ->
-                return Map.empty
-
               True ->
-                do  description <- Desc.read Path.description
-                    solution <- Solver.solve (Desc.dependencies description)
-                    liftIO $ do
-                        createDirectoryIfMissing True (dropFileName Path.solvedDependencies)
-                        Solution.write Path.solvedDependencies solution
-                    return solution
+                  Initialize.solution
 
-
+              False ->
+                  Initialize.descriptionAndSolution
 
 
 
