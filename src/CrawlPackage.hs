@@ -1,7 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 module CrawlPackage where
 
-import Control.Monad (forM)
 import Control.Monad.Error (MonadError, MonadIO, liftIO, throwError)
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
@@ -15,7 +14,7 @@ import qualified Elm.Package.Name as Pkg
 import qualified Elm.Package.Paths as Path
 import qualified Elm.Package.Solution as Solution
 import qualified Elm.Package.Version as V
-import TheMasterPlan ( PackageID, PackageSummary(..), PackageData(..) )
+import TheMasterPlan ( PackageSummary(..), PackageData(..) )
 
 
 -- STATE and ENVIRONMENT
