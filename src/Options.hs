@@ -1,15 +1,14 @@
 module Options where
 
-import Control.Applicative ((<$>), (<*>), (<|>), pure)
+import Control.Applicative ((<$>), (<*>), (<|>), pure, many)
 import Data.Monoid ((<>), mconcat, mempty)
 import Data.Version (showVersion)
 import qualified Options.Applicative as Opt
 import qualified Paths_elm_make as This
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
-data Option
-    = BuildFile FilePath
-    | BuildPackage
+
+type Option = [FilePath]
 
 
 parse :: IO Option
@@ -29,16 +28,7 @@ parse =
 
 option :: Opt.Parser Option
 option =
-    buildFile
-    <|> pure BuildPackage
-
-buildFile :: Opt.Parser Option
-buildFile =
-  BuildFile <$>
-    Opt.strArgument
-        (  Opt.metavar "FILE"
-        <> Opt.help "an Elm file that you want to compile"
-        )
+    many $ Opt.strArgument ( Opt.metavar "FILES..." )
 
 
 -- HELP
@@ -48,13 +38,13 @@ helpInfo =
     mconcat
         [ Opt.fullDesc
         , Opt.header top
-        , Opt.progDesc "install and publish elm libraries"
+        , Opt.progDesc "build Elm projects"
         , Opt.footerDoc (Just moreHelp)
         ]
   where
     top =
-        "Elm Package Manager " ++ showVersion This.version
-        ++ ", (c) Evan Czaplicki 2013-2014\n"
+        "elm-make " ++ showVersion This.version
+        ++ ", (c) Evan Czaplicki 2014\n"
 
     moreHelp =
         linesToDoc

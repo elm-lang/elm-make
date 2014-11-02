@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 module CrawlPackage where
 
+import Control.Arrow (second)
 import Control.Monad.Error (MonadError, MonadIO, liftIO, throwError)
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
@@ -24,59 +25,90 @@ data Env = Env
     , availableForeignModules :: Map.Map Module.Name [(Pkg.Name, V.Version)]
     }
 
-emptyPackageSummary :: PackageSummary
-emptyPackageSummary =
-    PackageSummary Map.empty Map.empty Map.empty
+
+initEnv
+    :: (MonadIO m, MonadError String m)
+    => FilePath
+    -> Desc.Description
+    -> Solution.Solution
+    -> m Env
+initEnv root desc solution =
+  do  availableForeignModules <- readAvailableForeignModules desc solution
+      let sourceDirs = map (root </>) (Desc.sourceDirs desc)
+      return (Env sourceDirs availableForeignModules)
 
 
 -- GENERIC CRAWLER
 
-crawl :: (MonadIO m, MonadError String m) => FilePath -> Solution.Solution -> Maybe FilePath -> m PackageSummary
-crawl root solution maybeFilePath =
+dfsFromFiles
+    :: (MonadIO m, MonadError String m)
+    => FilePath
+    -> Solution.Solution
+    -> [FilePath]
+    -> m ([Module.Name], PackageSummary)
+
+dfsFromFiles root solution filePaths =
   do  desc <- Desc.read (root </> Path.description)
+      env <- initEnv root desc solution
+  
+      info <- mapM (readPackageData Nothing) filePaths
+      let names = map fst info
+      let unvisited = concatMap (snd . snd) info
+      let pkgData = Map.fromList (map (second fst) info)
 
-      availableForeignModules <- readAvailableForeignModules desc solution
-      let sourceDirs = map (root </>) (Desc.sourceDirs desc)
-      let env = Env sourceDirs availableForeignModules
+      summary <-
+          dfs unvisited env (PackageSummary pkgData Map.empty Map.empty)
 
-      case maybeFilePath of
-        Just path ->
-            dfsFile path Nothing [] env emptyPackageSummary
-        Nothing ->
-            let modules = addParent Nothing (Desc.exposed desc)
-            in
-                dfsDependencies modules env emptyPackageSummary
+      return (names, summary)
+
+
+dfsFromExposedModules
+    :: (MonadIO m, MonadError String m)
+    => FilePath
+    -> Solution.Solution
+    -> m PackageSummary
+
+dfsFromExposedModules root solution =
+  do  desc <- Desc.read (root </> Path.description)
+      env <- initEnv root desc solution
+      let unvisited = addParent Nothing (Desc.exposed desc)
+      let summary = PackageSummary Map.empty Map.empty Map.empty
+      dfs unvisited env summary
+
 
 
 -- DEPTH FIRST SEARCH
 
-dfsDependencies
-    :: (MonadIO m, MonadError String m)
+dfs :: (MonadIO m, MonadError String m)
     => [(Module.Name, Maybe Module.Name)]
     -> Env
     -> PackageSummary
     -> m PackageSummary
 
-dfsDependencies [] _env summary =
+dfs [] _env summary =
     return summary
 
-dfsDependencies ((name,_) : unvisited) env summary
+dfs ((name,_) : unvisited) env summary
     | Map.member name (packageData summary) =
-        dfsDependencies unvisited env summary
+        dfs unvisited env summary
 
-dfsDependencies ((name,maybeParent) : unvisited) env summary =
+dfs ((name,maybeParent) : unvisited) env summary =
   do  filePaths <- find name (sourceDirs env)
       case (filePaths, Map.lookup name (availableForeignModules env)) of
         ([Elm filePath], Nothing) ->
-            dfsFile filePath (Just name) unvisited env summary
+            do  (name, (pkgData, newUnvisited)) <- readPackageData (Just name) filePath
+
+                dfs (newUnvisited ++ unvisited) env $ summary {
+                    packageData = Map.insert name pkgData (packageData summary)
+                }
 
         ([JS filePath], Nothing) ->
-            dfsDependencies unvisited env $ summary {
+            dfs unvisited env $ summary {
                 packageNatives = Map.insert name filePath (packageNatives summary)
             }
 
         ([], Just [pkg]) ->
-            dfsDependencies unvisited env $ summary {
+            dfs unvisited env $ summary {
                 packageForeignDependencies =
                     Map.insert name pkg (packageForeignDependencies summary)
             }
@@ -86,32 +118,6 @@ dfsDependencies ((name,maybeParent) : unvisited) env summary =
 
         (_, maybePkgs) ->
             throwError (errorTooMany name maybeParent filePaths maybePkgs)
-
-
-dfsFile
-    :: (MonadIO m, MonadError String m)
-    => FilePath
-    -> Maybe Module.Name
-    -> [(Module.Name, Maybe Module.Name)]
-    -> Env
-    -> PackageSummary
-    -> m PackageSummary
-
-dfsFile filePath maybeName unvisited env summary =
-  do  source <- liftIO (readFile filePath)
-      (name, deps) <- Compiler.parseDependencies source
-
-      checkName filePath name maybeName
-
-      dfsDependencies (addParent maybeName deps ++ unvisited) env $ summary {
-          packageData =
-              Map.insert name (PackageData filePath deps) (packageData summary)
-      }
-
-
-addParent :: Maybe Module.Name -> [Module.Name] -> [(Module.Name, Maybe Module.Name)]
-addParent maybeParent names =
-    map (\name -> (name, maybeParent)) names
 
 
 -- FIND LOCAL FILE PATH
@@ -155,7 +161,19 @@ findHelp locations moduleName (dir:srcDirs) =
 
 
 
--- CHECK MODULE NAME MATCHES FILE NAME
+-- READ and VALIDATE PACKAGE DATA for a file
+
+readPackageData
+    :: (MonadIO m, MonadError String m)
+    => Maybe Module.Name
+    -> FilePath
+    -> m (Module.Name, (PackageData, [(Module.Name, Maybe Module.Name)]))
+readPackageData maybeName filePath =
+  do  source <- liftIO (readFile filePath)
+      (name, deps) <- Compiler.parseDependencies source
+      checkName filePath name maybeName
+      return (name, (PackageData filePath deps, addParent (Just name) deps))
+
 
 checkName
     :: (MonadError String m)
@@ -167,6 +185,11 @@ checkName path nameFromSource maybeName =
         | nameFromSource == nameFromPath -> return ()
         | otherwise ->
             throwError (errorNameMismatch path nameFromPath nameFromSource)
+
+
+addParent :: Maybe Module.Name -> [Module.Name] -> [(Module.Name, Maybe Module.Name)]
+addParent maybeParent names =
+    map (\name -> (name, maybeParent)) names
 
 
 -- FOREIGN MODULES -- which ones are available, who exposes them?

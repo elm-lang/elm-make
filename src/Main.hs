@@ -19,18 +19,19 @@ import qualified Options
 import qualified Elm.Package.Initialize as Initialize
 import qualified Elm.Package.Paths as Path
 import qualified Elm.Package.Solution as Solution
+import qualified Generate
 import qualified Path as BuildPath
-import TheMasterPlan (Location, ProjectSummary(..), ProjectData(..))
+import TheMasterPlan
+    ( ModuleID(ModuleID), Location
+    , ProjectSummary(..), ProjectData(..)
+    )
 
 
 main :: IO ()
 main =
-  do  option <- Options.parse
-      case option of
-        Options.BuildPackage -> return ()
-        Options.BuildFile path -> return ()
+  do  files <- Options.parse
 
-      result <- runErrorT (runReaderT run "cache")
+      result <- runErrorT (runReaderT (run files) "cache")
       case result of
         Right () -> return ()
         Left msg ->
@@ -38,33 +39,50 @@ main =
               exitFailure
 
 
-run :: (MonadIO m, MonadError String m, MonadReader FilePath m) => m ()
-run =
+run :: (MonadIO m, MonadError String m, MonadReader FilePath m)
+    => [FilePath]
+    -> m ()
+run files =
   do  numProcessors <- liftIO getNumProcessors
       liftIO (setNumCapabilities numProcessors)
 
-      projectSummary <- crawl
+      (moduleNames, projectSummary) <- crawl files
       let dependencies = Map.map projectDependencies (projectData projectSummary)
       buildSummary <- LoadInterfaces.prepForBuild projectSummary
 
       cachePath <- ask
       liftIO (Build.build numProcessors cachePath dependencies buildSummary)
 
+      liftIO (Generate.js cachePath dependencies (projectNatives projectSummary) moduleNames "elm.js")
 
-crawl :: (MonadIO m, MonadError String m) => m (ProjectSummary Location)
-crawl =
+
+crawl
+    :: (MonadIO m, MonadError String m)
+    => [FilePath]
+    -> m ([ModuleID], ProjectSummary Location)
+crawl filePaths =
   do  solution <- getSolution
 
       summaries <-
           forM (Map.toList solution) $ \(name,version) -> do
-              packageSummary <- CrawlPackage.crawl (BuildPath.fromPackage name version) solution Nothing
+              let root = BuildPath.fromPackage name version
+              packageSummary <- CrawlPackage.dfsFromExposedModules root solution
               return (CrawlProject.canonicalizePackageSummary (Just (name,version)) packageSummary)
 
-      summary <-
-          do  packageSummary <- CrawlPackage.crawl "." solution Nothing
-              return (CrawlProject.canonicalizePackageSummary Nothing packageSummary)
+      (moduleNames, packageSummary) <-
+          case filePaths of
+            [] ->
+              do  summary <- CrawlPackage.dfsFromExposedModules "." solution
+                  return ([], summary)
 
-      return (List.foldl1 CrawlProject.union (summary : summaries))
+            _ -> CrawlPackage.dfsFromFiles "." solution filePaths
+
+      let summary = CrawlProject.canonicalizePackageSummary Nothing packageSummary
+
+      return
+          ( map (\n -> ModuleID n Nothing) moduleNames
+          , List.foldl1 CrawlProject.union (summary : summaries)
+          )
 
 
 getSolution :: (MonadIO m, MonadError String m) => m Solution.Solution
