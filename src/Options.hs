@@ -1,6 +1,6 @@
 module Options where
 
-import Control.Applicative ((<$>), (<*>), (<|>), pure, many)
+import Control.Applicative ((<$>), (<*>), (<|>), pure, many, optional)
 import Data.Monoid ((<>), mconcat, mempty)
 import Data.Version (showVersion)
 import qualified Options.Applicative as Opt
@@ -8,10 +8,13 @@ import qualified Paths_elm_make as This
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 
-type Option = [FilePath]
+data Options = Options
+    { files :: [FilePath]
+    , outputFile :: Maybe FilePath
+    }
 
 
-parse :: IO Option
+parse :: IO Options
 parse =
     Opt.customExecParser preferences parser
   where
@@ -19,21 +22,33 @@ parse =
     preferences =
         Opt.prefs (mempty <> Opt.showHelpOnError)
 
-    parser :: Opt.ParserInfo Option
+    parser :: Opt.ParserInfo Options
     parser =
-        Opt.info (Opt.helper <*> option) helpInfo
+        Opt.info (Opt.helper <*> options) helpInfo
 
 
 -- COMMANDS
 
-option :: Opt.Parser Option
-option =
-    many $ Opt.strArgument ( Opt.metavar "FILES..." )
+options :: Opt.Parser Options
+options =
+    Options
+      <$> files
+      <*> optional outputFile
+  where
+    files =
+      many (Opt.strArgument ( Opt.metavar "FILES..." ))
+
+    outputFile =
+      Opt.strOption
+         ( Opt.long "output"
+        <> Opt.short 'o'
+        <> Opt.metavar "FILE"
+        <> Opt.help "Write output to FILE." )
 
 
 -- HELP
 
-helpInfo :: Opt.InfoMod Option
+helpInfo :: Opt.InfoMod Options
 helpInfo =
     mconcat
         [ Opt.fullDesc

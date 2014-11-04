@@ -46,6 +46,8 @@ Executable elm-make
         ansi-wl-pprint,
         base >=4.2 && <5,
         binary,
+        blaze-html,
+        blaze-markup,
         bytestring,
         containers >= 0.3,
         directory,

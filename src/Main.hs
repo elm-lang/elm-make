@@ -28,9 +28,9 @@ import TheMasterPlan
 
 main :: IO ()
 main =
-  do  files <- Options.parse
+  do  options <- Options.parse
 
-      result <- runErrorT (runReaderT (run files) "cache")
+      result <- runErrorT (runReaderT (run options) "cache")
       case result of
         Right () -> return ()
         Left msg ->
@@ -39,20 +39,25 @@ main =
 
 
 run :: (MonadIO m, MonadError String m, MonadReader FilePath m)
-    => [FilePath]
+    => Options.Options
     -> m ()
-run files =
+run options =
   do  numProcessors <- liftIO getNumProcessors
       liftIO (setNumCapabilities numProcessors)
 
-      (moduleNames, projectSummary) <- crawl files
+      (moduleNames, projectSummary) <- crawl (Options.files options)
       let dependencies = Map.map projectDependencies (projectData projectSummary)
       buildSummary <- LoadInterfaces.prepForBuild projectSummary
 
       cachePath <- ask
       liftIO (Build.build numProcessors cachePath dependencies buildSummary)
 
-      liftIO (Generate.js cachePath dependencies (projectNatives projectSummary) moduleNames "elm.js")
+      Generate.generate
+          cachePath
+          dependencies
+          (projectNatives projectSummary)
+          moduleNames
+          (maybe "elm.js" id (Options.outputFile options))
 
 
 crawl
