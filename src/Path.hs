@@ -21,8 +21,8 @@ toObjectFile root (ModuleID (Module.Name names) package) =
 
 
 toSource :: Location -> FilePath
-toSource (Location relativePath package) =
-    inPackage package relativePath
+toSource (Location relativePath _package) =
+    relativePath
 
 
 inPackage :: Maybe (Pkg.Name, V.Version) -> FilePath -> FilePath

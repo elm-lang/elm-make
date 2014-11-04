@@ -20,7 +20,6 @@ import qualified Elm.Package.Initialize as Initialize
 import qualified Elm.Package.Paths as Path
 import qualified Elm.Package.Solution as Solution
 import qualified Generate
-import qualified Path as BuildPath
 import TheMasterPlan
     ( ModuleID(ModuleID), Location
     , ProjectSummary(..), ProjectData(..)
@@ -65,7 +64,7 @@ crawl filePaths =
 
       summaries <-
           forM (Map.toList solution) $ \(name,version) -> do
-              let root = BuildPath.fromPackage name version
+              let root = Path.package name version
               packageSummary <- CrawlPackage.dfsFromExposedModules root solution
               return (CrawlProject.canonicalizePackageSummary (Just (name,version)) packageSummary)
 
