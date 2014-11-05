@@ -3,11 +3,12 @@
 module Generate where
 
 import Control.Monad.Error (MonadError, MonadIO, forM_, liftIO, throwError)
-import qualified Data.ByteString.Lazy.Char8 as BS
 import qualified Data.Graph as Graph
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import qualified Data.Set as Set
+import qualified Data.Text.Lazy as Text
+import qualified Data.Text.Lazy.IO as Text
 import qualified Data.Tree as Tree
 import System.Directory ( createDirectoryIfMissing )
 import System.FilePath ( dropFileName, takeExtension )
@@ -16,14 +17,13 @@ import qualified Text.Blaze as Blaze
 import Text.Blaze.Html5 ((!))
 import qualified Text.Blaze.Html5 as H
 import qualified Text.Blaze.Html5.Attributes as A
-import qualified Text.Blaze.Renderer.Utf8 as Blaze
+import qualified Text.Blaze.Renderer.Text as Blaze
 
+import Elm.Utils ((|>))
+import qualified Elm.Compiler as Compiler
 import qualified Elm.Compiler.Module as Module
 import qualified Path
 import TheMasterPlan ( ModuleID(ModuleID), Location )
-
-
-x |> f = f x
 
 
 generate
@@ -35,11 +35,18 @@ generate
     -> FilePath
     -> m ()
 
+generate _cachePath _dependencies _natives [] _outputFile =
+  return ()
+
 generate cachePath dependencies natives moduleNames outputFile =
   do  let objectFiles =
             setupNodes cachePath dependencies natives
               |> getReachableObjectFiles moduleNames
       
+      runtimePath <- liftIO Compiler.runtimePath
+
+      let allFiles = runtimePath : objectFiles
+
       liftIO (createDirectoryIfMissing True (dropFileName outputFile))
 
       case takeExtension outputFile of
@@ -47,8 +54,8 @@ generate cachePath dependencies natives moduleNames outputFile =
           case moduleNames of
             [ModuleID moduleName _] ->
               liftIO $
-                do  js <- mapM BS.readFile objectFiles
-                    BS.writeFile outputFile (html (BS.concat js) moduleName)
+                do  js <- mapM Text.readFile allFiles
+                    Text.writeFile outputFile (html (Text.concat js) moduleName)
 
             _ ->
               throwError (errorNotOneModule moduleNames)
@@ -56,8 +63,8 @@ generate cachePath dependencies natives moduleNames outputFile =
         _ ->
           liftIO $
           withFile outputFile WriteMode $ \handle ->
-              forM_ objectFiles $ \objectFile ->
-                  BS.hPut handle =<< BS.readFile objectFile
+              forM_ allFiles $ \jsFile ->
+                  Text.hPutStr handle =<< Text.readFile jsFile
 
 
 errorNotOneModule :: [ModuleID] -> String
@@ -106,7 +113,7 @@ getReachableObjectFiles moduleNames nodes =
 
 -- GENERATE HTML
 
-html :: BS.ByteString -> Module.Name -> BS.ByteString
+html :: Text.Text -> Module.Name -> Text.Text
 html generatedJavaScript moduleName =
   Blaze.renderMarkup $
     H.docTypeHtml $ do 
@@ -114,7 +121,7 @@ html generatedJavaScript moduleName =
         H.meta ! A.charset "UTF-8"
         H.title (H.toHtml (Module.nameToString moduleName))
         H.script ! A.type_ "text/javascript" $
-            Blaze.unsafeLazyByteString generatedJavaScript
+            Blaze.preEscapedToMarkup generatedJavaScript
       H.body $ do
         H.script ! A.type_ "text/javascript" $
             Blaze.preEscapedToMarkup ("Elm.fullscreen(Elm." ++ Module.nameToString moduleName ++ ")")
