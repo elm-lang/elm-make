@@ -120,6 +120,9 @@ html generatedJavaScript moduleName =
       H.head $ do
         H.meta ! A.charset "UTF-8"
         H.title (H.toHtml (Module.nameToString moduleName))
+        H.style $ Blaze.preEscapedToMarkup
+            ("html,head,body { padding:0; margin:0; }\n\
+             \body { font-family: calibri, helvetica, arial, sans-serif; }" :: Text.Text)
         H.script ! A.type_ "text/javascript" $
             Blaze.preEscapedToMarkup generatedJavaScript
       H.body $ do
