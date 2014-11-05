@@ -22,6 +22,7 @@ import qualified Text.Blaze.Renderer.Text as Blaze
 import Elm.Utils ((|>))
 import qualified Elm.Compiler as Compiler
 import qualified Elm.Compiler.Module as Module
+import qualified Elm.Package.Name as Pkg
 import qualified Path
 import TheMasterPlan ( ModuleID(ModuleID), Location )
 
@@ -38,10 +39,12 @@ generate
 generate _cachePath _dependencies _natives [] _outputFile =
   return ()
 
-generate cachePath dependencies natives moduleNames outputFile =
-  do  let objectFiles =
+generate cachePath dependencies natives moduleIDs outputFile =
+  do  coreModuleIDs <- getCoreModules natives
+
+      let objectFiles =
             setupNodes cachePath dependencies natives
-              |> getReachableObjectFiles moduleNames
+              |> getReachableObjectFiles (coreModuleIDs ++ moduleIDs)
       
       runtimePath <- liftIO Compiler.runtimePath
 
@@ -51,14 +54,14 @@ generate cachePath dependencies natives moduleNames outputFile =
 
       case takeExtension outputFile of
         ".html" ->
-          case moduleNames of
+          case moduleIDs of
             [ModuleID moduleName _] ->
               liftIO $
                 do  js <- mapM Text.readFile allFiles
                     Text.writeFile outputFile (html (Text.concat js) moduleName)
 
             _ ->
-              throwError (errorNotOneModule moduleNames)
+              throwError (errorNotOneModule moduleIDs)
 
         _ ->
           liftIO $
@@ -109,6 +112,34 @@ getReachableObjectFiles moduleNames nodes =
           |> map vertexToKey
           |> map (\(path, _, _) -> path)
 
+
+getCoreModules
+    :: (MonadError String m)
+    => Map.Map ModuleID Location
+    -> m [ModuleID]
+getCoreModules natives =
+  case (length foundCores, length requiredCores) of
+    (found, required)
+      | found < required -> throwError (show found ++ " < " ++ show required ++ "\n" ++ show requiredCores)
+      | found == required -> return foundCores
+      | found > required -> throwError "Something went badly wrong.\nAre you somehow using two versions of elm-lang/core?"
+  where
+    foundCores =
+      Maybe.mapMaybe isCore (Map.keys natives)
+
+    isCore moduleID@(ModuleID (Module.Name name) pkg) =
+      case pkg of
+        Just (Pkg.Name "elm-lang" "core", _)
+          | name `elem` requiredCores ->
+              Just moduleID
+
+        _ -> Nothing
+
+
+requiredCores =
+  [ ["Native","Utils"]
+  , ["Native","Signal"]
+  ]
 
 
 -- GENERATE HTML
