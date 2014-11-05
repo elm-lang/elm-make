@@ -23,11 +23,14 @@ display updates completeTasks totalTasks =
       putStr clearProgressBar
       case update of
         Completion (ModuleID name _pkg) ->
-            do  putStrLn $ "Done with " ++ Module.nameToString name
+            do  -- putStrLn $ "Done with " ++ Module.nameToString name
                 display updates (completeTasks + 1) totalTasks
 
         Success ->
-            putStrLn $ "Success! Compiled " ++ show completeTasks ++ " files."
+            case completeTasks of
+              0 -> return ()
+              1 -> putStrLn $ "Compiled 1 file"
+              _ -> putStrLn $ "Compiled " ++ show completeTasks ++ " files"
 
         Error (ModuleID name pkg) msg ->
             do  putStrLn ""
