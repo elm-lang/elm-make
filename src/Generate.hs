@@ -139,6 +139,7 @@ getCoreModules natives =
 requiredCores =
   [ ["Native","Utils"]
   , ["Native","Signal"]
+  , ["Native","List"]
   ]
 
 
