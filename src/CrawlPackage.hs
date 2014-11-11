@@ -44,12 +44,12 @@ dfsFromFiles
     :: (MonadIO m, MonadError String m)
     => FilePath
     -> Solution.Solution
+    -> Desc.Description
     -> [FilePath]
     -> m ([Module.Name], PackageSummary)
 
-dfsFromFiles root solution filePaths =
-  do  desc <- Desc.read (root </> Path.description)
-      env <- initEnv root desc solution
+dfsFromFiles root solution desc filePaths =
+  do  env <- initEnv root desc solution
   
       info <- mapM (readPackageData Nothing) filePaths
       let names = map fst info
@@ -66,11 +66,11 @@ dfsFromExposedModules
     :: (MonadIO m, MonadError String m)
     => FilePath
     -> Solution.Solution
+    -> Desc.Description
     -> m PackageSummary
 
-dfsFromExposedModules root solution =
-  do  desc <- Desc.read (root </> Path.description)
-      env <- initEnv root desc solution
+dfsFromExposedModules root solution desc =
+  do  env <- initEnv root desc solution
       let unvisited = addParent Nothing (Desc.exposed desc)
       let summary = PackageSummary Map.empty Map.empty Map.empty
       dfs unvisited env summary

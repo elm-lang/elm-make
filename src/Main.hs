@@ -7,6 +7,7 @@ import Control.Monad.Reader (MonadReader, runReaderT, ask)
 import qualified Data.List as List
 import qualified Data.Map as Map
 import System.Directory (doesFileExist)
+import System.FilePath ((</>))
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
 import GHC.Conc (getNumProcessors, setNumCapabilities)
@@ -16,6 +17,7 @@ import qualified CrawlPackage
 import qualified CrawlProject
 import qualified LoadInterfaces
 import qualified Options
+import qualified Elm.Package.Description as Desc
 import qualified Elm.Package.Initialize as Initialize
 import qualified Elm.Package.Paths as Path
 import qualified Elm.Package.Solution as Solution
@@ -71,19 +73,23 @@ crawl filePaths =
       summaries <-
           forM (Map.toList solution) $ \(name,version) -> do
               let root = Path.package name version
-              packageSummary <- CrawlPackage.dfsFromExposedModules root solution
+              desc <- Desc.read (root </> Path.description)
+              packageSummary <- CrawlPackage.dfsFromExposedModules root solution desc
               return (CrawlProject.canonicalizePackageSummary (name,version) packageSummary)
 
+
+      desc <- Desc.read Path.description
+      
       (moduleNames, packageSummary) <-
           case filePaths of
             [] ->
-              do  summary <- CrawlPackage.dfsFromExposedModules "." solution
+              do  summary <- CrawlPackage.dfsFromExposedModules "." solution desc
                   return ([], summary)
 
-            _ -> CrawlPackage.dfsFromFiles "." solution filePaths
+            _ -> CrawlPackage.dfsFromFiles "." solution desc filePaths
 
       let thisPackage =
-            (undefined, undefined)
+            (Desc.name desc, Desc.version desc)
 
       let summary =
             CrawlProject.canonicalizePackageSummary thisPackage packageSummary
