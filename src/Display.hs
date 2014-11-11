@@ -40,16 +40,13 @@ display updates completeTasks totalTasks =
 
 -- ERROR MESSAGE
 
-errorMessage :: Module.Name -> Maybe PackageID -> String -> String
-errorMessage name maybePackage msg =
+errorMessage :: Module.Name -> PackageID -> String -> String
+errorMessage name (pkgName, version) msg =
     "Error when compiling " ++ Module.nameToString name ++ " module"
     ++ context ++ ":\n" ++ msg
   where
     context =
-        case maybePackage of
-          Nothing -> ""
-          Just (pkgName, version) ->
-              " in package " ++ Pkg.toString pkgName ++ " " ++ V.toString version
+        " in package " ++ Pkg.toString pkgName ++ " " ++ V.toString version
 
 
 -- PROGRESS BAR

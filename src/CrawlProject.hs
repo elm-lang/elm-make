@@ -12,7 +12,7 @@ import TheMasterPlan
 
 
 canonicalizePackageSummary
-    :: Maybe PackageID
+    :: PackageID
     -> PackageSummary
     -> ProjectSummary Location
 canonicalizePackageSummary package (PackageSummary pkgData natives foreignDependencies) =
@@ -30,7 +30,7 @@ canonicalizePackageSummary package (PackageSummary pkgData natives foreignDepend
 
 
 canonicalizePackageData
-    :: Maybe PackageID
+    :: PackageID
     -> Map.Map Module.Name PackageID
     -> PackageData
     -> ProjectData Location
@@ -45,7 +45,7 @@ canonicalizePackageData package foreignDependencies (PackageData filePath deps) 
         case Map.lookup moduleName foreignDependencies of
           Nothing -> ModuleID moduleName package
           Just foreignPackage ->
-              ModuleID moduleName (Just foreignPackage)
+              ModuleID moduleName foreignPackage
 
 
 union :: ProjectSummary a -> ProjectSummary a -> ProjectSummary a

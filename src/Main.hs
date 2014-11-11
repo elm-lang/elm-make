@@ -72,7 +72,7 @@ crawl filePaths =
           forM (Map.toList solution) $ \(name,version) -> do
               let root = Path.package name version
               packageSummary <- CrawlPackage.dfsFromExposedModules root solution
-              return (CrawlProject.canonicalizePackageSummary (Just (name,version)) packageSummary)
+              return (CrawlProject.canonicalizePackageSummary (name,version) packageSummary)
 
       (moduleNames, packageSummary) <-
           case filePaths of
@@ -82,10 +82,14 @@ crawl filePaths =
 
             _ -> CrawlPackage.dfsFromFiles "." solution filePaths
 
-      let summary = CrawlProject.canonicalizePackageSummary Nothing packageSummary
+      let thisPackage =
+            (undefined, undefined)
+
+      let summary =
+            CrawlProject.canonicalizePackageSummary thisPackage packageSummary
 
       return
-          ( map (\n -> ModuleID n Nothing) moduleNames
+          ( map (\n -> ModuleID n thisPackage) moduleNames
           , List.foldl1 CrawlProject.union (summary : summaries)
           )
 

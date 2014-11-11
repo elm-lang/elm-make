@@ -12,11 +12,13 @@ import qualified Data.Set as Set
 import qualified Display
 import qualified Elm.Compiler as Compiler
 import qualified Elm.Compiler.Module as Module
+import qualified Elm.Package.Name as Pkg
 import qualified Path
 import qualified Utils.File as File
 import qualified Utils.Queue as Queue
+import qualified TheMasterPlan as TMP
 import TheMasterPlan
-    ( ModuleID(ModuleID), Location
+    ( ModuleID, Location
     , BuildSummary(BuildSummary), BuildData(..)
     )
 
@@ -202,24 +204,27 @@ buildModule
     -> Map.Map ModuleID Module.Interface
     -> (ModuleID, Location)
     -> IO ()
-buildModule completionChan cachePath interfaces (moduleName, location) =
+buildModule completionChan cachePath interfaces (moduleID, location) =
     Exception.catch compile recover
   where
+    (Pkg.Name user project) =
+       fst (TMP.packageID moduleID)
+
     compile =
       do  source <- readFile (Path.toSource location)
-          let ifaces = Map.mapKeysMonotonic (\(ModuleID name _pkg) -> name) interfaces
-          let rawResult = Compiler.compile source ifaces
+          let ifaces = Map.mapKeysMonotonic TMP.moduleName interfaces
+          let rawResult = Compiler.compile user project source ifaces
           result <-
               case rawResult of
-                Left errorMsg -> return (Error moduleName errorMsg)
+                Left errorMsg -> return (Error moduleID errorMsg)
                 Right (interface, js) ->
                   do  threadId <- myThreadId
-                      File.writeBinary (Path.toInterface cachePath moduleName) interface
-                      writeFile (Path.toObjectFile cachePath moduleName) js
-                      return (Success moduleName interface threadId)
+                      File.writeBinary (Path.toInterface cachePath moduleID) interface
+                      writeFile (Path.toObjectFile cachePath moduleID) js
+                      return (Success moduleID interface threadId)
 
           Chan.writeChan completionChan result
 
     recover :: Exception.SomeException -> IO ()
     recover msg =
-      Chan.writeChan completionChan (Error moduleName (show msg))
+      Chan.writeChan completionChan (Error moduleID (show msg))

@@ -25,12 +25,9 @@ toSource (Location relativePath _package) =
     relativePath
 
 
-inPackage :: Maybe (Pkg.Name, V.Version) -> FilePath -> FilePath
-inPackage packageID relativePath =
-    case packageID of
-      Nothing -> relativePath
-      Just (name, version) ->
-          fromPackage name version </> relativePath
+inPackage :: (Pkg.Name, V.Version) -> FilePath -> FilePath
+inPackage (name, version) relativePath =
+    fromPackage name version </> relativePath
 
 
 fromPackage :: Pkg.Name -> V.Version -> FilePath

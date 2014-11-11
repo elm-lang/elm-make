@@ -16,7 +16,7 @@ import qualified Elm.Package.Version as V
 
 data ModuleID = ModuleID
     { moduleName :: Module.Name
-    , packageID :: Maybe PackageID
+    , packageID :: PackageID
     }
     deriving (Eq, Ord)
 
@@ -66,7 +66,7 @@ data ProjectData a = ProjectData
 
 data Location = Location
     { relativePath :: FilePath
-    , package :: Maybe PackageID
+    , package :: PackageID
     }
 
 
