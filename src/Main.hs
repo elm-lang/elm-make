@@ -23,7 +23,7 @@ import qualified Elm.Package.Paths as Path
 import qualified Elm.Package.Solution as Solution
 import qualified Generate
 import TheMasterPlan
-    ( ModuleID(ModuleID), Location
+    ( ModuleID(ModuleID), Location, PackageID
     , ProjectSummary(..), ProjectData(..)
     )
 
@@ -48,12 +48,14 @@ run options =
   do  numProcessors <- liftIO getNumProcessors
       liftIO (setNumCapabilities numProcessors)
 
-      (moduleNames, projectSummary) <- crawl (Options.files options)
+      (thisPackage, moduleNames, projectSummary) <-
+          crawl (Options.files options)
+
       let dependencies = Map.map projectDependencies (projectData projectSummary)
       buildSummary <- LoadInterfaces.prepForBuild projectSummary
 
       cachePath <- ask
-      liftIO (Build.build numProcessors cachePath dependencies buildSummary)
+      liftIO (Build.build numProcessors thisPackage cachePath dependencies buildSummary)
 
       Generate.generate
           cachePath
@@ -66,7 +68,7 @@ run options =
 crawl
     :: (MonadIO m, MonadError String m)
     => [FilePath]
-    -> m ([ModuleID], ProjectSummary Location)
+    -> m (PackageID, [ModuleID], ProjectSummary Location)
 crawl filePaths =
   do  solution <- getSolution
 
@@ -95,7 +97,8 @@ crawl filePaths =
             CrawlProject.canonicalizePackageSummary thisPackage packageSummary
 
       return
-          ( map (\n -> ModuleID n thisPackage) moduleNames
+          ( thisPackage
+          , map (\n -> ModuleID n thisPackage) moduleNames
           , List.foldl1 CrawlProject.union (summary : summaries)
           )
 

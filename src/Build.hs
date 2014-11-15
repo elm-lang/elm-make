@@ -18,7 +18,7 @@ import qualified Utils.File as File
 import qualified Utils.Queue as Queue
 import qualified TheMasterPlan as TMP
 import TheMasterPlan
-    ( ModuleID, Location
+    ( ModuleID, Location, PackageID
     , BuildSummary(BuildSummary), BuildData(..)
     )
 
@@ -102,11 +102,11 @@ numIncompleteTasks state =
 
 -- PARALLEL BUILDS!!!
 
-build :: Int -> FilePath -> Map.Map ModuleID [ModuleID] -> BuildSummary -> IO ()
-build numProcessors cachePath dependencies summary =
+build :: Int -> PackageID -> FilePath -> Map.Map ModuleID [ModuleID] -> BuildSummary -> IO ()
+build numProcessors rootPkg cachePath dependencies summary =
   do  env <- initEnv numProcessors cachePath dependencies summary
       forkIO (buildManager env (initState summary))
-      Display.display (displayChan env) 0 (numTasks env)
+      Display.display (displayChan env) rootPkg 0 (numTasks env)
 
 
 buildManager :: Env -> State -> IO ()

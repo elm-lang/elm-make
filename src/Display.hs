@@ -5,6 +5,7 @@ import System.Exit (exitFailure)
 import System.IO (hFlush, hPutStrLn, stderr, stdout)
 import qualified Elm.Compiler.Module as Module
 import qualified Elm.Package.Name as Pkg
+import qualified Elm.Package.Paths as Path
 import qualified Elm.Package.Version as V
 import TheMasterPlan (ModuleID(ModuleID), PackageID)
 
@@ -15,16 +16,15 @@ data Update
     | Error ModuleID String
 
 
-display :: Chan.Chan Update -> Int -> Int -> IO ()
-display updates completeTasks totalTasks =
+display :: Chan.Chan Update -> PackageID -> Int -> Int -> IO ()
+display updates rootPkg completeTasks totalTasks =
   do  putStr (renderProgressBar completeTasks totalTasks)
       hFlush stdout
       update <- Chan.readChan updates
       putStr clearProgressBar
       case update of
         Completion (ModuleID name _pkg) ->
-            do  -- putStrLn $ "Done with " ++ Module.nameToString name
-                display updates (completeTasks + 1) totalTasks
+            display updates rootPkg (completeTasks + 1) totalTasks
 
         Success ->
             case completeTasks of
@@ -34,19 +34,32 @@ display updates completeTasks totalTasks =
 
         Error (ModuleID name pkg) msg ->
             do  putStrLn ""
-                hPutStrLn stderr (errorMessage name pkg msg)
+                hPutStrLn stderr (errorMessage rootPkg name pkg msg)
                 exitFailure
 
 
 -- ERROR MESSAGE
 
-errorMessage :: Module.Name -> PackageID -> String -> String
-errorMessage name (pkgName, version) msg =
-    "Error when compiling " ++ Module.nameToString name ++ " module"
-    ++ context ++ ":\n" ++ msg
+errorMessage :: PackageID -> Module.Name -> PackageID -> String -> String
+errorMessage rootPkg name errorPkg@(pkgName, version) msg =
+    "Error" ++ context ++ " when compiling " ++ Module.nameToString name
+    ++ ":\n\n" ++ msg ++ report
   where
-    context =
-        " in package " ++ Pkg.toString pkgName ++ " " ++ V.toString version
+    isLocalError = errorPkg == rootPkg
+
+    context
+      | isLocalError = ""
+      | otherwise =
+          " in package " ++ Pkg.toString pkgName ++ " " ++ V.toString version
+
+    report
+      | isLocalError = ""
+      | otherwise =
+          "\n\nThis error is probably due to bad version bounds. You should definitely\n"
+          ++ "inform the maintainer of " ++ Pkg.toString pkgName ++ " to get this fixed.\n"
+          ++ "In the meantime, you can attempt to get rid of the problematic dependency by\n"
+          ++ "modifying " ++ Path.solvedDependencies ++ ", though that is not a long term\n"
+          ++ "solution."
 
 
 -- PROGRESS BAR
@@ -58,11 +71,11 @@ barLength = 50.0
 renderProgressBar :: Int -> Int -> String
 renderProgressBar complete total =
     "[" ++ replicate numDone '=' ++ replicate numLeft ' ' ++ "] - " ++ show complete ++ " / " ++ show total
-    where
-        fraction = fromIntegral complete / fromIntegral total
-        numDone = truncate (fraction * barLength)
-        numLeft = truncate barLength - numDone
-        percent = truncate (fraction * 100)
+  where
+    fraction = fromIntegral complete / fromIntegral total
+    numDone = truncate (fraction * barLength)
+    numLeft = truncate barLength - numDone
+    percent = truncate (fraction * 100)
 
 
 clearProgressBar :: String
