@@ -15,6 +15,7 @@ import qualified Elm.Package.Name as Pkg
 import qualified Elm.Package.Paths as Path
 import qualified Elm.Package.Solution as Solution
 import qualified Elm.Package.Version as V
+import qualified TheMasterPlan as TMP
 import TheMasterPlan ( PackageSummary(..), PackageData(..) )
 
 
@@ -51,13 +52,14 @@ dfsFromFiles
 dfsFromFiles root solution desc filePaths =
   do  env <- initEnv root desc solution
   
-      info <- mapM (readPackageData Nothing) filePaths
+      let pkgName = Desc.name desc
+      info <- mapM (readPackageData pkgName Nothing) filePaths
       let names = map fst info
       let unvisited = concatMap (snd . snd) info
       let pkgData = Map.fromList (map (second fst) info)
 
       summary <-
-          dfs unvisited env (PackageSummary pkgData Map.empty Map.empty)
+          dfs pkgName unvisited env (PackageSummary pkgData Map.empty Map.empty)
 
       return (names, summary)
 
@@ -73,42 +75,44 @@ dfsFromExposedModules root solution desc =
   do  env <- initEnv root desc solution
       let unvisited = addParent Nothing (Desc.exposed desc)
       let summary = PackageSummary Map.empty Map.empty Map.empty
-      dfs unvisited env summary
+      dfs (Desc.name desc) unvisited env summary
 
 
 
 -- DEPTH FIRST SEARCH
 
 dfs :: (MonadIO m, MonadError String m)
-    => [(Module.Name, Maybe Module.Name)]
+    => Pkg.Name
+    -> [(Module.Name, Maybe Module.Name)]
     -> Env
     -> PackageSummary
     -> m PackageSummary
 
-dfs [] _env summary =
+dfs _pkgName [] _env summary =
     return summary
 
-dfs ((name,_) : unvisited) env summary
+dfs pkgName ((name,_) : unvisited) env summary
     | Map.member name (packageData summary) =
-        dfs unvisited env summary
+        dfs pkgName unvisited env summary
 
-dfs ((name,maybeParent) : unvisited) env summary =
+dfs pkgName ((name,maybeParent) : unvisited) env summary =
   do  filePaths <- find name (sourceDirs env)
       case (filePaths, Map.lookup name (availableForeignModules env)) of
         ([Elm filePath], Nothing) ->
-            do  (name, (pkgData, newUnvisited)) <- readPackageData (Just name) filePath
+            do  (name, (pkgData, newUnvisited)) <-
+                    readPackageData pkgName (Just name) filePath
 
-                dfs (newUnvisited ++ unvisited) env $ summary {
+                dfs pkgName (newUnvisited ++ unvisited) env $ summary {
                     packageData = Map.insert name pkgData (packageData summary)
                 }
 
         ([JS filePath], Nothing) ->
-            dfs unvisited env $ summary {
+            dfs pkgName unvisited env $ summary {
                 packageNatives = Map.insert name filePath (packageNatives summary)
             }
 
         ([], Just [pkg]) ->
-            dfs unvisited env $ summary {
+            dfs pkgName unvisited env $ summary {
                 packageForeignDependencies =
                     Map.insert name pkg (packageForeignDependencies summary)
             }
@@ -165,13 +169,20 @@ findHelp locations moduleName (dir:srcDirs) =
 
 readPackageData
     :: (MonadIO m, MonadError String m)
-    => Maybe Module.Name
+    => Pkg.Name
+    -> Maybe Module.Name
     -> FilePath
     -> m (Module.Name, (PackageData, [(Module.Name, Maybe Module.Name)]))
-readPackageData maybeName filePath =
+readPackageData pkgName maybeName filePath =
   do  source <- liftIO (readFile filePath)
-      (name, deps) <- Compiler.parseDependencies source
+      (name, rawDeps) <- Compiler.parseDependencies source
       checkName filePath name maybeName
+
+      let deps =
+            if pkgName == TMP.core
+              then rawDeps
+              else Module.defaultImports ++ rawDeps
+
       return (name, (PackageData filePath deps, addParent (Just name) deps))
 
 

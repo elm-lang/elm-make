@@ -22,6 +22,10 @@ data ModuleID = ModuleID
 
 type PackageID = (Pkg.Name, V.Version)
 
+core :: Pkg.Name
+core =
+    Pkg.Name "elm-lang" "core"
+
 
 -- CRAWL AN INDIVIDUAL PACKGE
 
