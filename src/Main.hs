@@ -35,7 +35,8 @@ main =
       result <- runErrorT (runReaderT (run options) "cache")
       case result of
         Right () ->
-          putStrLn "Success!"
+          return ()
+
         Left msg ->
           do  hPutStrLn stderr msg
               exitFailure

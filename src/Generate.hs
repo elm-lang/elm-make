@@ -66,6 +66,7 @@ generate cachePath dependencies natives moduleIDs outputFile =
               forM_ allFiles $ \jsFile ->
                   Text.hPutStr handle =<< Text.readFile jsFile
 
+      liftIO (putStrLn ("Successfully generated " ++ outputFile))
 
 errorNotOneModule :: [ModuleID] -> String
 errorNotOneModule names =
