@@ -57,9 +57,10 @@ dfsFromFiles root solution desc filePaths =
       let names = map fst info
       let unvisited = concatMap (snd . snd) info
       let pkgData = Map.fromList (map (second fst) info)
+      let initialSummary = PackageSummary pkgData Map.empty Map.empty
 
       summary <-
-          dfs pkgName unvisited env (PackageSummary pkgData Map.empty Map.empty)
+          dfs (Desc.natives desc) pkgName unvisited env initialSummary
 
       return (names, summary)
 
@@ -75,44 +76,45 @@ dfsFromExposedModules root solution desc =
   do  env <- initEnv root desc solution
       let unvisited = addParent Nothing (Desc.exposed desc)
       let summary = PackageSummary Map.empty Map.empty Map.empty
-      dfs (Desc.name desc) unvisited env summary
+      dfs (Desc.natives desc) (Desc.name desc) unvisited env summary
 
 
 
 -- DEPTH FIRST SEARCH
 
 dfs :: (MonadIO m, MonadError String m)
-    => Pkg.Name
+    => Bool
+    -> Pkg.Name
     -> [(Module.Name, Maybe Module.Name)]
     -> Env
     -> PackageSummary
     -> m PackageSummary
 
-dfs _pkgName [] _env summary =
+dfs _allowNatives _pkgName [] _env summary =
     return summary
 
-dfs pkgName ((name,_) : unvisited) env summary
+dfs allowNatives pkgName ((name,_) : unvisited) env summary
     | Map.member name (packageData summary) =
-        dfs pkgName unvisited env summary
+        dfs allowNatives pkgName unvisited env summary
 
-dfs pkgName ((name,maybeParent) : unvisited) env summary =
-  do  filePaths <- find name (sourceDirs env)
+dfs allowNatives pkgName ((name,maybeParent) : unvisited) env summary =
+  do  filePaths <- find allowNatives name (sourceDirs env)
       case (filePaths, Map.lookup name (availableForeignModules env)) of
         ([Elm filePath], Nothing) ->
             do  (name, (pkgData, newUnvisited)) <-
                     readPackageData pkgName (Just name) filePath
 
-                dfs pkgName (newUnvisited ++ unvisited) env $ summary {
+                dfs allowNatives pkgName (newUnvisited ++ unvisited) env $ summary {
                     packageData = Map.insert name pkgData (packageData summary)
                 }
 
         ([JS filePath], Nothing) ->
-            dfs pkgName unvisited env $ summary {
+            dfs allowNatives pkgName unvisited env $ summary {
                 packageNatives = Map.insert name filePath (packageNatives summary)
             }
 
         ([], Just [pkg]) ->
-            dfs pkgName unvisited env $ summary {
+            dfs allowNatives pkgName unvisited env $ summary {
                 packageForeignDependencies =
                     Map.insert name pkg (packageForeignDependencies summary)
             }
@@ -128,23 +130,27 @@ dfs pkgName ((name,maybeParent) : unvisited) env summary =
 
 data CodePath = Elm FilePath | JS FilePath
 
-find :: (MonadIO m) => Module.Name -> [FilePath] -> m [CodePath]
-find moduleName sourceDirs =
-    findHelp [] moduleName sourceDirs
+find :: (MonadIO m) => Bool -> Module.Name -> [FilePath] -> m [CodePath]
+find allowNatives moduleName sourceDirs =
+    findHelp allowNatives [] moduleName sourceDirs
+
 
 findHelp
     :: (MonadIO m)
-    => [CodePath]
+    => Bool
+    -> [CodePath]
     -> Module.Name
     -> [FilePath]
     -> m [CodePath]
 
-findHelp locations _moduleName [] =
+findHelp _allowNatives locations _moduleName [] =
   return locations
 
-findHelp locations moduleName (dir:srcDirs) =
-  do  updatedLocations <- addJsPath =<< addElmPath locations
-      findHelp updatedLocations moduleName srcDirs
+findHelp allowNatives locations moduleName (dir:srcDirs) =
+  do  locations' <- addElmPath locations
+      updatedLocations <-
+          if allowNatives then addJsPath locations' else return locations'
+      findHelp allowNatives updatedLocations moduleName srcDirs
   where
     consIf bool x xs =
         if bool then x:xs else xs
