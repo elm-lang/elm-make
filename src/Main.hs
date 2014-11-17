@@ -32,7 +32,7 @@ main :: IO ()
 main =
   do  options <- Options.parse
 
-      result <- runErrorT (runReaderT (run options) "cache")
+      result <- runErrorT (runReaderT (run options) "elm_artifacts")
       case result of
         Right () ->
           return ()
