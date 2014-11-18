@@ -32,7 +32,7 @@ main :: IO ()
 main =
   do  options <- Options.parse
 
-      result <- runErrorT (runReaderT (run options) "elm_artifacts")
+      result <- runErrorT (runReaderT (run options) artifactDirectory)
       case result of
         Right () ->
           return ()
@@ -40,6 +40,11 @@ main =
         Left msg ->
           do  hPutStrLn stderr msg
               exitFailure
+
+
+artifactDirectory :: FilePath
+artifactDirectory =
+    Path.stuffDirectory </> "build-artifacts"
 
 
 run :: (MonadIO m, MonadError String m, MonadReader FilePath m)
