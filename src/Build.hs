@@ -30,6 +30,7 @@ data Env = Env
     , displayChan :: Chan.Chan Display.Update
     , reverseDependencies :: Map.Map ModuleID [ModuleID]
     , cachePath :: FilePath
+    , publicModules :: Set.Set ModuleID
     }
 
 data State = State
@@ -49,8 +50,14 @@ data Result
 
 -- HELPERS for ENV and STATE
 
-initEnv :: Int -> FilePath -> Map.Map ModuleID [ModuleID] -> BuildSummary -> IO Env
-initEnv numProcessors cachePath dependencies (BuildSummary blocked _completed) =
+initEnv
+    :: Int
+    -> FilePath
+    -> [ModuleID]
+    -> Map.Map ModuleID [ModuleID]
+    -> BuildSummary
+    -> IO Env
+initEnv numProcessors cachePath publicModules dependencies (BuildSummary blocked _completed) =
   do  resultChan <- Chan.newChan
       displayChan <- Chan.newChan
       return $ Env {
@@ -59,8 +66,10 @@ initEnv numProcessors cachePath dependencies (BuildSummary blocked _completed) =
           resultChan = resultChan,
           displayChan = displayChan,
           reverseDependencies = reverseGraph dependencies,
-          cachePath = cachePath
+          cachePath = cachePath,
+          publicModules = Set.fromList publicModules
       }
+
 
 -- reverse dependencies, "who depends on me?"
 reverseGraph :: (Ord a) => Map.Map a [a] -> Map.Map a [a]
@@ -102,9 +111,9 @@ numIncompleteTasks state =
 
 -- PARALLEL BUILDS!!!
 
-build :: Int -> PackageID -> FilePath -> Map.Map ModuleID [ModuleID] -> BuildSummary -> IO ()
-build numProcessors rootPkg cachePath dependencies summary =
-  do  env <- initEnv numProcessors cachePath dependencies summary
+build :: Int -> PackageID -> FilePath -> [ModuleID] -> Map.Map ModuleID [ModuleID] -> BuildSummary -> IO ()
+build numProcessors rootPkg cachePath publicModules dependencies summary =
+  do  env <- initEnv numProcessors cachePath publicModules dependencies summary
       forkIO (buildManager env (initState summary))
       Display.display (displayChan env) rootPkg 0 (numTasks env)
 
@@ -127,7 +136,7 @@ buildManager env state =
 
     Update ->
       do  let interfaces = completedInterfaces state
-          let compile = buildModule (resultChan env) (cachePath env) interfaces
+          let compile = buildModule env interfaces
           threadIds <- mapM (forkIO . compile) runNow
           buildManager env $
               state
@@ -199,12 +208,11 @@ updateBlockedModules name interface blockedModules potentiallyFreedModule =
 -- UPDATE - BUILD SOME MODULES
 
 buildModule
-    :: Chan.Chan Result
-    -> FilePath
+    :: Env
     -> Map.Map ModuleID Module.Interface
     -> (ModuleID, Location)
     -> IO ()
-buildModule completionChan cachePath interfaces (moduleID, location) =
+buildModule env interfaces (moduleID, location) =
     Exception.catch compile recover
   where
     (Pkg.Name user project) =
@@ -215,16 +223,44 @@ buildModule completionChan cachePath interfaces (moduleID, location) =
           let ifaces = Map.mapKeysMonotonic TMP.moduleName interfaces
           let rawResult = Compiler.compile user project source ifaces
           result <-
-              case rawResult of
-                Left errorMsg -> return (Error moduleID errorMsg)
-                Right (interface, js) ->
-                  do  threadId <- myThreadId
-                      File.writeBinary (Path.toInterface cachePath moduleID) interface
-                      writeFile (Path.toObjectFile cachePath moduleID) js
-                      return (Success moduleID interface threadId)
+            case rawResult of
+              Left errorMsg ->
+                return (Error moduleID errorMsg)
 
-          Chan.writeChan completionChan result
+              Right (interface, js) ->
+                case checkPorts env moduleID interface of
+                  Just msg ->
+                    return (Error moduleID msg)
+
+                  Nothing ->
+                    do  threadId <- myThreadId
+                        let cache = cachePath env
+                        File.writeBinary (Path.toInterface cache moduleID) interface
+                        writeFile (Path.toObjectFile cache moduleID) js
+                        return (Success moduleID interface threadId)
+
+          Chan.writeChan (resultChan env) result
 
     recover :: Exception.SomeException -> IO ()
     recover msg =
-      Chan.writeChan completionChan (Error moduleID (show msg))
+      Chan.writeChan (resultChan env) (Error moduleID (show msg))
+
+
+checkPorts :: Env -> ModuleID -> Module.Interface -> Maybe String
+checkPorts env moduleID interface =
+  case Set.member moduleID (publicModules env) of
+    True -> Nothing
+    False ->
+      case Module.interfacePorts interface of
+        [] -> Nothing
+        _ -> Just portError
+
+
+portError :: String
+portError =
+    concat
+    [ "Port Error: ports may only appear in the main module. We do not want ports\n"
+    , "    appearing in library code where it adds a non-modular dependency. If I\n"
+    , "    import it twice, what does that really mean? This restriction may be\n"
+    , "    lifted later."
+    ]

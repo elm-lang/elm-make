@@ -49,20 +49,27 @@ run options =
   do  numProcessors <- liftIO getNumProcessors
       liftIO (setNumCapabilities numProcessors)
 
-      (thisPackage, moduleNames, projectSummary) <-
+      (thisPackage, publicModules, projectSummary) <-
           crawl (Options.files options)
 
       let dependencies = Map.map projectDependencies (projectData projectSummary)
       buildSummary <- LoadInterfaces.prepForBuild projectSummary
 
       cachePath <- ask
-      liftIO (Build.build numProcessors thisPackage cachePath dependencies buildSummary)
+      liftIO $
+        Build.build
+            numProcessors
+            thisPackage
+            cachePath
+            publicModules
+            dependencies
+            buildSummary
 
       Generate.generate
           cachePath
           dependencies
           (projectNatives projectSummary)
-          moduleNames
+          publicModules
           (maybe "elm.js" id (Options.outputFile options))
 
 
