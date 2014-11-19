@@ -55,7 +55,7 @@ run args =
       liftIO (setNumCapabilities numProcessors)
 
       (thisPackage, publicModules, projectSummary) <-
-          crawl (Arguments.files args)
+          crawl (Arguments.autoYes args) (Arguments.files args)
 
       let dependencies = Map.map projectDependencies (projectData projectSummary)
       buildSummary <- LoadInterfaces.prepForBuild projectSummary
@@ -80,10 +80,11 @@ run args =
 
 crawl
     :: (MonadIO m, MonadError String m)
-    => [FilePath]
+    => Bool
+    -> [FilePath]
     -> m (PackageID, [ModuleID], ProjectSummary Location)
-crawl filePaths =
-  do  solution <- getSolution
+crawl autoYes filePaths =
+  do  solution <- getSolution autoYes
 
       summaries <-
           forM (Map.toList solution) $ \(name,version) -> do
@@ -116,8 +117,8 @@ crawl filePaths =
           )
 
 
-getSolution :: (MonadIO m, MonadError String m) => m Solution.Solution
-getSolution =
+getSolution :: (MonadIO m, MonadError String m) => Bool -> m Solution.Solution
+getSolution autoYes =
   do  exists <- liftIO (doesFileExist Path.solvedDependencies)
       if exists
           then Solution.read Path.solvedDependencies
@@ -127,10 +128,10 @@ getSolution =
         do  exists <- liftIO (doesFileExist Path.description)
             case exists of
               True ->
-                  Initialize.solution
+                  Initialize.solution autoYes
 
               False ->
-                  Initialize.descriptionAndSolution
+                  Initialize.descriptionAndSolution autoYes
 
 
 

@@ -11,6 +11,7 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PP
 data Arguments = Arguments
     { files :: [FilePath]
     , outputFile :: Maybe FilePath
+    , autoYes :: Bool
     }
 
 
@@ -34,16 +35,18 @@ options =
     Arguments
       <$> files
       <*> optional outputFile
+      <*> yes
   where
     files =
       many (Opt.strArgument ( Opt.metavar "FILES..." ))
 
     outputFile =
-      Opt.strOption
-         ( Opt.long "output"
-        <> Opt.short 'o'
-        <> Opt.metavar "FILE"
-        <> Opt.help "Write output to FILE." )
+      Opt.strOption $
+        mconcat
+        [ Opt.long "output"
+        , Opt.metavar "FILE"
+        , Opt.help "Write output to FILE."
+        ]
 
 
 -- HELP
@@ -72,3 +75,11 @@ linesToDoc :: [String] -> PP.Doc
 linesToDoc lines =
     PP.vcat (map PP.text lines)
 
+
+yes :: Opt.Parser Bool
+yes =
+    Opt.switch $
+        mconcat
+        [ Opt.long "yes"
+        , Opt.help "Reply 'yes' to all automated prompts."
+        ]
