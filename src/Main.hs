@@ -122,17 +122,5 @@ getSolution autoYes =
   do  exists <- liftIO (doesFileExist Path.solvedDependencies)
       if exists
           then Solution.read Path.solvedDependencies
-          else attemptToGenerate
-  where
-    attemptToGenerate =
-        do  exists <- liftIO (doesFileExist Path.description)
-            case exists of
-              True ->
-                  Initialize.solution autoYes
-
-              False ->
-                  Initialize.descriptionAndSolution autoYes
-
-
-
+          else Initialize.solution autoYes
 
