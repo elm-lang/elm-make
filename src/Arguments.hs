@@ -1,6 +1,6 @@
-module Options where
+module Arguments where
 
-import Control.Applicative ((<$>), (<*>), (<|>), pure, many, optional)
+import Control.Applicative ((<$>), (<*>), many, optional)
 import Data.Monoid ((<>), mconcat, mempty)
 import Data.Version (showVersion)
 import qualified Options.Applicative as Opt
@@ -8,13 +8,13 @@ import qualified Paths_elm_make as This
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 
-data Options = Options
+data Arguments = Arguments
     { files :: [FilePath]
     , outputFile :: Maybe FilePath
     }
 
 
-parse :: IO Options
+parse :: IO Arguments
 parse =
     Opt.customExecParser preferences parser
   where
@@ -22,16 +22,16 @@ parse =
     preferences =
         Opt.prefs (mempty <> Opt.showHelpOnError)
 
-    parser :: Opt.ParserInfo Options
+    parser :: Opt.ParserInfo Arguments
     parser =
         Opt.info (Opt.helper <*> options) helpInfo
 
 
 -- COMMANDS
 
-options :: Opt.Parser Options
+options :: Opt.Parser Arguments
 options =
-    Options
+    Arguments
       <$> files
       <*> optional outputFile
   where
@@ -48,7 +48,7 @@ options =
 
 -- HELP
 
-helpInfo :: Opt.InfoMod Options
+helpInfo :: Opt.InfoMod Arguments
 helpInfo =
     mconcat
         [ Opt.fullDesc
@@ -71,3 +71,4 @@ helpInfo =
 linesToDoc :: [String] -> PP.Doc
 linesToDoc lines =
     PP.vcat (map PP.text lines)
+

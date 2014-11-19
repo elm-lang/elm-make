@@ -16,7 +16,7 @@ import qualified Build
 import qualified CrawlPackage
 import qualified CrawlProject
 import qualified LoadInterfaces
-import qualified Options
+import qualified Arguments
 import qualified Elm.Package.Description as Desc
 import qualified Elm.Package.Initialize as Initialize
 import qualified Elm.Package.Paths as Path
@@ -30,9 +30,9 @@ import TheMasterPlan
 
 main :: IO ()
 main =
-  do  options <- Options.parse
+  do  args <- Arguments.parse
 
-      result <- runErrorT (runReaderT (run options) artifactDirectory)
+      result <- runErrorT (runReaderT (run args) artifactDirectory)
       case result of
         Right () ->
           return ()
@@ -48,14 +48,14 @@ artifactDirectory =
 
 
 run :: (MonadIO m, MonadError String m, MonadReader FilePath m)
-    => Options.Options
+    => Arguments.Arguments
     -> m ()
-run options =
+run args =
   do  numProcessors <- liftIO getNumProcessors
       liftIO (setNumCapabilities numProcessors)
 
       (thisPackage, publicModules, projectSummary) <-
-          crawl (Options.files options)
+          crawl (Arguments.files args)
 
       let dependencies = Map.map projectDependencies (projectData projectSummary)
       buildSummary <- LoadInterfaces.prepForBuild projectSummary
@@ -75,7 +75,7 @@ run options =
           dependencies
           (projectNatives projectSummary)
           publicModules
-          (maybe "elm.js" id (Options.outputFile options))
+          (maybe "elm.js" id (Arguments.outputFile args))
 
 
 crawl
