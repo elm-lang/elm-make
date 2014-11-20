@@ -20,7 +20,6 @@ import qualified Text.Blaze.Html5.Attributes as A
 import qualified Text.Blaze.Renderer.Text as Blaze
 
 import Elm.Utils ((|>))
-import qualified Elm.Compiler as Compiler
 import qualified Elm.Compiler.Module as Module
 import qualified Path
 import TheMasterPlan ( ModuleID(ModuleID), Location )
@@ -43,10 +42,6 @@ generate cachePath dependencies natives moduleIDs outputFile =
             setupNodes cachePath dependencies natives
               |> getReachableObjectFiles moduleIDs
       
-      runtimePath <- liftIO Compiler.runtimePath
-
-      let allFiles = runtimePath : objectFiles
-
       liftIO (createDirectoryIfMissing True (dropFileName outputFile))
 
       case takeExtension outputFile of
@@ -54,8 +49,8 @@ generate cachePath dependencies natives moduleIDs outputFile =
           case moduleIDs of
             [ModuleID moduleName _] ->
               liftIO $
-                do  js <- mapM Text.readFile allFiles
-                    Text.writeFile outputFile (html (Text.concat js) moduleName)
+                do  js <- mapM Text.readFile objectFiles
+                    Text.writeFile outputFile (html (Text.concat (header:js)) moduleName)
 
             _ ->
               throwError (errorNotOneModule moduleIDs)
@@ -63,10 +58,17 @@ generate cachePath dependencies natives moduleIDs outputFile =
         _ ->
           liftIO $
           withFile outputFile WriteMode $ \handle ->
-              forM_ allFiles $ \jsFile ->
-                  Text.hPutStr handle =<< Text.readFile jsFile
+              do  Text.hPutStrLn handle header
+                  forM_ objectFiles $ \jsFile ->
+                      Text.hPutStrLn handle =<< Text.readFile jsFile
 
       liftIO (putStrLn ("Successfully generated " ++ outputFile))
+
+
+header :: Text.Text
+header =
+    "var Elm = Elm || { Native: {} };"
+
 
 errorNotOneModule :: [ModuleID] -> String
 errorNotOneModule names =
