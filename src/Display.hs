@@ -75,7 +75,6 @@ renderProgressBar complete total =
     fraction = fromIntegral complete / fromIntegral total
     numDone = truncate (fraction * barLength)
     numLeft = truncate barLength - numDone
-    percent = truncate (fraction * 100)
 
 
 clearProgressBar :: String
