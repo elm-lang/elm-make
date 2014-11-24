@@ -56,7 +56,7 @@ errorMessage rootPkg name errorPkg@(pkgName, version) msg =
       | isLocalError = ""
       | otherwise =
           "\n\nThis error is probably due to bad version bounds. You should definitely\n"
-          ++ "inform the maintainer of " ++ Pkg.toString pkgName ++ " to get this fixed.\n"
+          ++ "inform the maintainer of " ++ Pkg.toString pkgName ++ " to get this fixed.\n\n"
           ++ "In the meantime, you can attempt to get rid of the problematic dependency by\n"
           ++ "modifying " ++ Path.solvedDependencies ++ ", though that is not a long term\n"
           ++ "solution."
