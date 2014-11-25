@@ -5,15 +5,15 @@
   * **Compile down to JS or HTML** &mdash; turn Elm files into artifacts that
     can be used with whatever backend you are already using.
 
-  * **Parallel builds** &mdash; if you have four cores, `elm-make` will try to
+  * **Build in parallel** &mdash; if you have four cores, `elm-make` will try to
     compile four files at all times.
 
   * **Build dependencies** &mdash; `elm-make` is designed to work with
     `elm-package` so if you use a bunch of 3rd party packages they will all
     work just fine.
 
-  * **Module filtering** &mdash; if a module is not needed for your project it
-    will be filtered out of the resulting JS or HTML.
+  * **Build what you need** &mdash; if a module is not needed for your project it
+    will not be built or appear in the resulting JS or HTML.
 
 
 ## Basic Usage
