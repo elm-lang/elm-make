@@ -1,8 +1,10 @@
 module Display where
 
 import qualified Control.Concurrent.Chan as Chan
+import Control.Monad (when)
 import System.Exit (exitFailure)
-import System.IO (hFlush, hPutStrLn, stderr, stdout)
+import System.IO (hFlush, hPutStr, hPutStrLn, stderr, stdout)
+import GHC.IO.Handle (hIsTerminalDevice)
 import qualified Elm.Compiler.Module as Module
 import qualified Elm.Package.Name as Pkg
 import qualified Elm.Package.Paths as Path
@@ -17,14 +19,25 @@ data Update
 
 
 display :: Chan.Chan Update -> PackageID -> Int -> Int -> IO ()
-display updates rootPkg completeTasks totalTasks =
-  do  putStr (renderProgressBar completeTasks totalTasks)
-      hFlush stdout
-      update <- Chan.readChan updates
-      putStr clearProgressBar
+display updatesChan rootPkg completeTasks totalTasks =
+  do  isTerminal <- hIsTerminalDevice stdout
+      loop isTerminal updatesChan rootPkg completeTasks totalTasks
+
+
+loop :: Bool -> Chan.Chan Update -> PackageID -> Int -> Int -> IO ()
+loop isTerminal updatesChan rootPkg completeTasks totalTasks =
+  do  when isTerminal $
+          do  hPutStr stdout (renderProgressBar completeTasks totalTasks)
+              hFlush stdout
+
+      update <- Chan.readChan updatesChan
+      
+      when isTerminal $
+          hPutStr stdout clearProgressBar
+
       case update of
         Completion (ModuleID name _pkg) ->
-            display updates rootPkg (completeTasks + 1) totalTasks
+            loop isTerminal updatesChan rootPkg (completeTasks + 1) totalTasks
 
         Success ->
             case completeTasks of
