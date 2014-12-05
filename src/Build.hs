@@ -44,7 +44,7 @@ data State = State
 data CurrentState = Wait | Update
 
 data Result
-    = Error ModuleID String
+    = Error ModuleID Location String
     | Success ModuleID Module.Interface String ThreadId
 
 
@@ -134,9 +134,9 @@ buildManager env state =
                   Chan.writeChan (displayChan env) (Display.Completion moduleID)
                   buildManager env (registerSuccess env state moduleID interface threadId)
 
-            Error moduleID msg ->
+            Error moduleID location msg ->
               do  mapM killThread (Set.toList (activeThreads state))
-                  Chan.writeChan (displayChan env) (Display.Error moduleID msg)
+                  Chan.writeChan (displayChan env) (Display.Error moduleID location msg)
 
     Update ->
       do  let interfaces = completedInterfaces state
@@ -229,12 +229,12 @@ buildModule env interfaces (moduleID, location) =
           result <-
             case rawResult of
               Left errorMsg ->
-                return (Error moduleID errorMsg)
+                return (Error moduleID location errorMsg)
 
               Right (interface, js) ->
                 case checkPorts env moduleID interface of
                   Just msg ->
-                    return (Error moduleID msg)
+                    return (Error moduleID location msg)
 
                   Nothing ->
                     do  threadId <- myThreadId
@@ -244,7 +244,7 @@ buildModule env interfaces (moduleID, location) =
 
     recover :: Exception.SomeException -> IO ()
     recover msg =
-      Chan.writeChan (resultChan env) (Error moduleID (show msg))
+      Chan.writeChan (resultChan env) (Error moduleID location (show msg))
 
 
 checkPorts :: Env -> ModuleID -> Module.Interface -> Maybe String

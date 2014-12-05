@@ -9,13 +9,14 @@ import qualified Elm.Compiler.Module as Module
 import qualified Elm.Package.Name as Pkg
 import qualified Elm.Package.Paths as Path
 import qualified Elm.Package.Version as V
-import TheMasterPlan (ModuleID(ModuleID), PackageID)
+import qualified Path
+import TheMasterPlan (Location, ModuleID(ModuleID), PackageID)
 
 
 data Update
     = Completion ModuleID
     | Success
-    | Error ModuleID String
+    | Error ModuleID Location String
 
 
 display :: Chan.Chan Update -> PackageID -> Int -> Int -> IO ()
@@ -36,7 +37,7 @@ loop isTerminal updatesChan rootPkg completeTasks totalTasks =
           hPutStr stdout clearProgressBar
 
       case update of
-        Completion (ModuleID name _pkg) ->
+        Completion _moduleID ->
             loop isTerminal updatesChan rootPkg (completeTasks + 1) totalTasks
 
         Success ->
@@ -45,25 +46,25 @@ loop isTerminal updatesChan rootPkg completeTasks totalTasks =
               1 -> putStrLn $ "Compiled 1 file"
               _ -> putStrLn $ "Compiled " ++ show completeTasks ++ " files"
 
-        Error (ModuleID name pkg) msg ->
+        Error (ModuleID name pkg) location msg ->
             do  putStrLn ""
-                hPutStrLn stderr (errorMessage rootPkg name pkg msg)
+                hPutStrLn stderr (errorMessage rootPkg pkg name location msg)
                 exitFailure
 
 
 -- ERROR MESSAGE
 
-errorMessage :: PackageID -> Module.Name -> PackageID -> String -> String
-errorMessage rootPkg name errorPkg@(pkgName, version) msg =
-    "Error" ++ context ++ " when compiling " ++ Module.nameToString name
-    ++ ":\n\n" ++ msg ++ report
+errorMessage :: PackageID -> PackageID -> Module.Name -> Location -> String -> String
+errorMessage rootPkg errorPkg@(pkgName, version) name location msg =
+    "Error" ++ context ++ ":\n\n" ++ msg ++ report
   where
     isLocalError = errorPkg == rootPkg
 
     context
-      | isLocalError = ""
+      | isLocalError = " in " ++ Path.toSource location
       | otherwise =
           " in package " ++ Pkg.toString pkgName ++ " " ++ V.toString version
+          ++ " in module " ++ Module.nameToString name
 
     report
       | isLocalError = ""
