@@ -45,7 +45,7 @@ data CurrentState = Wait | Update
 
 data Result
     = Error ModuleID String
-    | Success ModuleID Module.Interface ThreadId
+    | Success ModuleID Module.Interface String ThreadId
 
 
 -- HELPERS for ENV and STATE
@@ -127,12 +127,16 @@ buildManager env state =
     Wait ->
       do  result <- Chan.readChan (resultChan env)
           case result of
-            Success name interface threadId ->
-              do  Chan.writeChan (displayChan env) (Display.Completion name)
-                  buildManager env (registerSuccess env state name interface threadId)
-            Error name msg ->
+            Success moduleID interface js threadId ->
+              do  let cache = cachePath env
+                  File.writeBinary (Path.toInterface cache moduleID) interface
+                  writeFile (Path.toObjectFile cache moduleID) js
+                  Chan.writeChan (displayChan env) (Display.Completion moduleID)
+                  buildManager env (registerSuccess env state moduleID interface threadId)
+
+            Error moduleID msg ->
               do  mapM killThread (Set.toList (activeThreads state))
-                  Chan.writeChan (displayChan env) (Display.Error name msg)
+                  Chan.writeChan (displayChan env) (Display.Error moduleID msg)
 
     Update ->
       do  let interfaces = completedInterfaces state
@@ -234,10 +238,7 @@ buildModule env interfaces (moduleID, location) =
 
                   Nothing ->
                     do  threadId <- myThreadId
-                        let cache = cachePath env
-                        File.writeBinary (Path.toInterface cache moduleID) interface
-                        writeFile (Path.toObjectFile cache moduleID) js
-                        return (Success moduleID interface threadId)
+                        return (Success moduleID interface js threadId)
 
           Chan.writeChan (resultChan env) result
 
