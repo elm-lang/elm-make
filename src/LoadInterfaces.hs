@@ -188,21 +188,24 @@ topologicalSort dependencies =
     errorOnCycle scc =
         case scc of
           Graph.AcyclicSCC name -> return name
-          Graph.CyclicSCC cycle ->
+          Graph.CyclicSCC cycle@(first:_) ->
               throwError $
               "Your dependencies for a cycle:\n\n"
-              ++ showCycle dependencies cycle
-              ++ "\nYou may need to move some values to a new module to get rid of thi cycle."
+              ++ showCycle first cycle
+              ++ "\nYou may need to move some values to a new module to get rid of the cycle."
 
 
-showCycle :: Map.Map ModuleID [ModuleID] -> [ModuleID] -> String
-showCycle _dependencies [] = ""
-showCycle dependencies (name:rest) =
-    "    " ++ idToString name ++ " => " ++ idToString next ++ "\n"
-    ++ showCycle dependencies (next:remaining)
+showCycle :: ModuleID -> [ModuleID] -> String
+showCycle first cycle =
+  case cycle of
+    [] -> ""
+
+    [last] -> 
+        "    " ++ idToString last ++ " => " ++ idToString first ++ "\n"
+
+    one:two:rest ->
+        "    " ++ idToString one ++ " => " ++ idToString two ++ "\n"
+        ++ showCycle first (two:rest)
   where
     idToString (ModuleID moduleName _pkg) =
         Module.nameToString moduleName
-    ([next], remaining) =
-        List.partition (`elem` rest) (dependencies Map.! name)
-
