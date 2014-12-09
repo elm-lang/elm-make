@@ -40,7 +40,18 @@ Executable elm-make
         Main.hs
 
     other-modules:
-        Paths_elm_make
+        Arguments,
+        Build,
+        CrawlPackage,
+        CrawlProject,
+        Display,
+        Generate,
+        LoadInterfaces,
+        Path,
+        Paths_elm_make,
+        TheMasterPlan,
+        Utils.File,
+        Utils.Queue
 
     Build-depends:
         ansi-wl-pprint,
