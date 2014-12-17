@@ -67,7 +67,7 @@ helpInfo =
     moreHelp =
         linesToDoc
         [ "To learn more about a particular command run:"
-        , "    elm-package COMMAND --help"
+        , "    elm-make COMMAND --help"
         ]
 
 
