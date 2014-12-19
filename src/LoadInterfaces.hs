@@ -190,7 +190,7 @@ topologicalSort dependencies =
           Graph.AcyclicSCC name -> return name
           Graph.CyclicSCC cycle@(first:_) ->
               throwError $
-              "Your dependencies for a cycle:\n\n"
+              "Your dependencies form a cycle:\n\n"
               ++ showCycle first cycle
               ++ "\nYou may need to move some values to a new module to get rid of the cycle."
 
