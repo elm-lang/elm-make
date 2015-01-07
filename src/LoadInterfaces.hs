@@ -41,6 +41,11 @@ addInterfaces projectData =
       return (Map.fromList enhancedData)
       
 
+-- TODO: if two modules in the same package have the same name, their interface
+-- files will be indistinguishable right now. The most common case of this is
+-- modules named Main. As a stopgap, we never load in the interface file for
+-- Main. The real fix may be to add a hash of the source code to the interface
+-- files.
 maybeLoadInterface
     :: (MonadIO m, MonadReader FilePath m, MonadError String m)
     => (ModuleID, ProjectData Location)
@@ -52,7 +57,7 @@ maybeLoadInterface (moduleID, (ProjectData location deps)) =
       fresh <- liftIO (isFresh sourcePath interfacePath)
 
       maybeInterface <-
-          case fresh of
+          case fresh && not (isMain moduleID) of
             False -> return Nothing
             True ->
               do  interface <- File.readBinary interfacePath
@@ -70,6 +75,13 @@ isFresh sourcePath interfacePath =
           do  sourceTime <- getModificationTime sourcePath
               interfaceTime <- getModificationTime interfacePath
               return (sourceTime <= interfaceTime)
+
+
+isMain :: ModuleID -> Bool
+isMain (ModuleID (Module.Name names) _) =
+    case names of
+      ["Main"] -> True
+      _ -> False
 
 
 -- FILTER STALE INTERFACES -- have files become stale due to other changes?
