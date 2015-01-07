@@ -97,14 +97,14 @@ filterIfStale enhancedSummary filteredSummary moduleName =
     trueLocation =
         case maybeInterface of
           Just interface
-            | all (haveInterface enhancedSummary) deps ->
+            | all (haveInterface filteredSummary) deps ->
                 Right interface
 
           _ -> Left filePath
 
 
 haveInterface
-    :: Map.Map ModuleID (ProjectData (Location, Maybe Module.Interface))
+    :: Map.Map ModuleID (ProjectData (Either Location Module.Interface))
     -> ModuleID
     -> Bool
 haveInterface enhancedSummary rawName =
@@ -112,7 +112,7 @@ haveInterface enhancedSummary rawName =
       Nothing -> True
       Just name ->
           case Map.lookup name enhancedSummary of
-            Just (ProjectData (_, Just _) _) -> True
+            Just (ProjectData (Right _) _) -> True
             _ -> False
 
 
