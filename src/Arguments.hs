@@ -63,7 +63,8 @@ helpInfo =
         ]
   where
     top =
-        "elm-make " ++ showVersion This.version ++ " (Elm Platform " ++ Compiler.version ++ ")\n"
+        "elm-make " ++ showVersion This.version
+        ++ " (Elm Platform " ++ Compiler.version ++ ")\n"
 
     moreHelp =
         linesToDoc
