@@ -7,6 +7,8 @@ import qualified Options.Applicative as Opt
 import qualified Paths_elm_make as This
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
+import qualified Elm.Compiler as Compiler
+
 
 data Arguments = Arguments
     { files :: [FilePath]
@@ -61,8 +63,7 @@ helpInfo =
         ]
   where
     top =
-        "elm-make " ++ showVersion This.version
-        ++ ", (c) Evan Czaplicki 2014\n"
+        "elm-make " ++ showVersion This.version ++ " (Elm Platform " ++ Compiler.version ++ ")\n"
 
     moreHelp =
         linesToDoc
