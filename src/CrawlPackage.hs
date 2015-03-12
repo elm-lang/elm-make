@@ -2,7 +2,7 @@
 module CrawlPackage where
 
 import Control.Arrow (second)
-import Control.Monad.Error (MonadError, MonadIO, liftIO, throwError)
+import Control.Monad.Error (MonadError, MonadIO, catchError, liftIO, throwError)
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import System.Directory (doesFileExist, getCurrentDirectory, setCurrentDirectory)
@@ -51,7 +51,7 @@ dfsFromFiles
 
 dfsFromFiles root solution desc filePaths =
   do  env <- initEnv root desc solution
-  
+
       let pkgName = Desc.name desc
       info <- mapM (readPackageData pkgName Nothing) filePaths
       let names = map fst info
@@ -162,7 +162,7 @@ findHelp allowNatives locations moduleName (dir:srcDirs) =
 
     addJsPath locs =
       do  let jsPath = dir </> Module.nameToPath moduleName <.> "js"
-          jsExists <-          
+          jsExists <-
               case moduleName of
                 Module.Name ("Native" : _) -> liftIO (doesFileExist jsPath)
                 _ -> return False
@@ -181,7 +181,11 @@ readPackageData
     -> m (Module.Name, (PackageData, [(Module.Name, Maybe Module.Name)]))
 readPackageData pkgName maybeName filePath =
   do  source <- liftIO (readFile filePath)
-      (name, rawDeps) <- Compiler.parseDependencies source
+
+      (name, rawDeps) <-
+          Compiler.parseDependencies source `catchError` \msg ->
+              throwError (addContext msg)
+
       checkName filePath name maybeName
 
       let deps =
@@ -190,6 +194,11 @@ readPackageData pkgName maybeName filePath =
               else Module.defaultImports ++ rawDeps
 
       return (name, (PackageData filePath deps, addParent (Just name) deps))
+  where
+    addContext msg =
+      "Problem parsing imports in file " ++ filePath ++ " " ++ msg ++ "\n\n"
+      ++ "    There is probably a problem with the syntax of your imports. For details\n"
+      ++ "    on import syntax, look at <http://elm-lang.org/learn/Syntax.elm>\n\n"
 
 
 checkName
