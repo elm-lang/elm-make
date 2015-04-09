@@ -197,8 +197,11 @@ readPackageData pkgName maybeName filePath =
   where
     addContext msg =
       "Problem parsing imports in file " ++ filePath ++ " " ++ msg ++ "\n\n"
-      ++ "    There is probably a problem with the syntax of your imports. For details\n"
-      ++ "    on import syntax, look at <http://elm-lang.org/learn/Syntax.elm>\n\n"
+      ++ "There is probably a problem with the syntax of your imports. For example,\n"
+      ++ "import syntax was changed a bit from 0.14 to 0.15:\n\n"
+      ++ "    0.14: import Html (..)\n"
+      ++ "    0.15: import Html exposing (..)\n\n"
+      ++ "See <http://elm-lang.org/learn/Syntax.elm> for more info.\n\n"
 
 
 checkName
