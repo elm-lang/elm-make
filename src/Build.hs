@@ -223,13 +223,17 @@ buildModule env interfaces (moduleID, location) =
        fst (TMP.packageID moduleID)
 
     compile =
-      do  source <- readFile (Path.toSource location)
+      do  let path = Path.toSource location
+          source <- readFile path
           let ifaces = Map.mapKeysMonotonic TMP.moduleName interfaces
-          let rawResult = Compiler.compile user project source ifaces
+          let (warnings, rawResult) =
+                  Compiler.compile user project source ifaces
           result <-
             case rawResult of
-              Left errorMsg ->
-                return (Error moduleID location errorMsg)
+              Left errors ->
+                let msg = concatMap (Compiler.errorToString path source) errors
+                in
+                    return (Error moduleID location msg)
 
               Right (interface, js) ->
                 case checkPorts env moduleID interface of
