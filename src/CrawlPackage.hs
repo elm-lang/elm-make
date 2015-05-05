@@ -2,7 +2,7 @@
 module CrawlPackage where
 
 import Control.Arrow (second)
-import Control.Monad.Error (MonadError, MonadIO, catchError, liftIO, throwError)
+import Control.Monad.Except (MonadError, MonadIO, catchError, liftIO, throwError)
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import System.Directory (doesFileExist, getCurrentDirectory, setCurrentDirectory)

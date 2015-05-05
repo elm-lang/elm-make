@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Utils.File where
 
-import Control.Monad.Error (MonadError, throwError, MonadIO, liftIO)
+import Control.Monad.Except (MonadError, throwError, MonadIO, liftIO)
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Binary as Binary
 import System.Directory (createDirectoryIfMissing, doesFileExist)

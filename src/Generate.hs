@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Generate where
 
-import Control.Monad.Error (MonadError, MonadIO, forM_, liftIO, throwError)
+import Control.Monad.Except (MonadError, MonadIO, forM_, liftIO, throwError)
 import qualified Data.Graph as Graph
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
@@ -41,7 +41,7 @@ generate cachePath dependencies natives moduleIDs outputFile =
   do  let objectFiles =
             setupNodes cachePath dependencies natives
               |> getReachableObjectFiles moduleIDs
-      
+
       liftIO (createDirectoryIfMissing True (dropFileName outputFile))
 
       case takeExtension outputFile of
@@ -118,7 +118,7 @@ getReachableObjectFiles moduleNames nodes =
 html :: Text.Text -> Module.Name -> Text.Text
 html generatedJavaScript moduleName =
   Blaze.renderMarkup $
-    H.docTypeHtml $ do 
+    H.docTypeHtml $ do
       H.head $ do
         H.meta ! A.charset "UTF-8"
         H.title (H.toHtml (Module.nameToString moduleName))

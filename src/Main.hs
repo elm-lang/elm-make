@@ -2,7 +2,7 @@
 module Main where
 
 import Control.Monad (forM)
-import Control.Monad.Error (MonadError, runErrorT, MonadIO, liftIO)
+import Control.Monad.Except (MonadError, runExceptT, MonadIO, liftIO)
 import Control.Monad.Reader (MonadReader, runReaderT, ask)
 import qualified Data.List as List
 import qualified Data.Map as Map
@@ -32,7 +32,7 @@ main :: IO ()
 main =
   do  args <- Arguments.parse
 
-      result <- runErrorT (runReaderT (run args) artifactDirectory)
+      result <- runExceptT (runReaderT (run args) artifactDirectory)
       case result of
         Right () ->
           return ()
@@ -95,7 +95,7 @@ crawl autoYes filePaths =
 
 
       desc <- Desc.read Path.description
-      
+
       (moduleNames, packageSummary) <-
           case filePaths of
             [] ->

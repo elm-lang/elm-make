@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 module LoadInterfaces where
 
-import Control.Monad.Error (MonadError, MonadIO, liftIO, throwError)
+import Control.Monad.Except (MonadError, MonadIO, liftIO, throwError)
 import Control.Monad.Reader (MonadReader, ask)
 import qualified Data.Graph as Graph
 import qualified Data.List as List
@@ -39,7 +39,7 @@ addInterfaces
 addInterfaces projectData =
   do  enhancedData <- mapM maybeLoadInterface (Map.toList projectData)
       return (Map.fromList enhancedData)
-      
+
 
 -- TODO: if two modules in the same package have the same name, their interface
 -- files will be indistinguishable right now. The most common case of this is
@@ -64,7 +64,7 @@ maybeLoadInterface (moduleID, (ProjectData location deps)) =
                   return (Just interface)
 
       return (moduleID, ProjectData (location, maybeInterface) deps)
-                    
+
 
 isFresh :: FilePath -> FilePath -> IO Bool
 isFresh sourcePath interfacePath =
@@ -212,7 +212,7 @@ showCycle first cycle =
   case cycle of
     [] -> ""
 
-    [last] -> 
+    [last] ->
         "    " ++ idToString last ++ " => " ++ idToString first ++ "\n"
 
     one:two:rest ->
