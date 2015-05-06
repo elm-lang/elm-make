@@ -32,7 +32,7 @@ loop isTerminal updatesChan rootPkg completeTasks totalTasks =
               hFlush stdout
 
       update <- Chan.readChan updatesChan
-      
+
       when isTerminal $
           hPutStr stdout clearProgressBar
 
@@ -48,7 +48,7 @@ loop isTerminal updatesChan rootPkg completeTasks totalTasks =
 
         Error (ModuleID name pkg) location msg ->
             do  putStrLn ""
-                hPutStrLn stderr (errorMessage rootPkg pkg name location msg)
+                hPutStr stderr (errorMessage rootPkg pkg name location msg)
                 exitFailure
 
 
