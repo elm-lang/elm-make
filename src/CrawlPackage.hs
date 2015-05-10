@@ -180,11 +180,14 @@ readPackageData
     -> FilePath
     -> m (Module.Name, (PackageData, [(Module.Name, Maybe Module.Name)]))
 readPackageData pkgName maybeName filePath =
-  do  source <- liftIO (readFile filePath)
+  do  sourceCode <- liftIO (readFile filePath)
 
       (name, rawDeps) <-
-          Compiler.parseDependencies source `catchError` \msg ->
-              throwError (addContext msg)
+          case Compiler.parseDependencies sourceCode of
+            Right result ->
+                return result
+            Left msgs ->
+                throwError (concatMap (format sourceCode) msgs)
 
       checkName filePath name maybeName
 
@@ -195,8 +198,8 @@ readPackageData pkgName maybeName filePath =
 
       return (name, (PackageData filePath deps, addParent (Just name) deps))
   where
-    addContext msg =
-      "Problem parsing imports in file " ++ filePath ++ " " ++ msg ++ "\n\n"
+    format src msg =
+      Compiler.errorToString filePath src msg
       ++ "There is probably a problem with the syntax of your imports. For example,\n"
       ++ "import syntax was changed a bit from 0.14 to 0.15:\n\n"
       ++ "    0.14: import Html (..)\n"
