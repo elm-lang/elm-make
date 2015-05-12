@@ -46,34 +46,41 @@ loop isTerminal updatesChan rootPkg completeTasks totalTasks =
               1 -> putStrLn $ "Compiled 1 file"
               _ -> putStrLn $ "Compiled " ++ show completeTasks ++ " files"
 
-        Error (ModuleID name pkg) location msg ->
+        Error (ModuleID _name pkg) location msg ->
             do  putStrLn ""
-                hPutStr stderr (errorMessage rootPkg pkg name location msg)
+                hPutStr stderr (errorMessage rootPkg pkg location msg)
                 exitFailure
 
 
 -- ERROR MESSAGE
 
-errorMessage :: PackageID -> PackageID -> Module.Name -> Location -> String -> String
-errorMessage rootPkg errorPkg@(pkgName, version) name location msg =
-    "Error" ++ context ++ ":\n\n" ++ msg ++ report
-  where
-    isLocalError = errorPkg == rootPkg
+errorMessage :: PackageID -> PackageID -> Location -> String -> String
+errorMessage rootPkg errorPkg location msg =
+  if errorPkg /= rootPkg
+    then
+      dependencyError errorPkg
+    else
+      let
+        start = "## ERRORS "
+        end = " " ++ Path.toSource location
+      in
+        start ++ replicate (80 - length start - length end) '#' ++ end ++ "\n\n" ++ msg
 
-    context
-      | isLocalError = " in " ++ Path.toSource location
-      | otherwise =
-          " in package " ++ Pkg.toString pkgName ++ " " ++ V.toString version
-          ++ " in module " ++ Module.nameToString name
 
-    report
-      | isLocalError = ""
-      | otherwise =
-          "\n\nThis error is probably due to bad version bounds. You should definitely\n"
-          ++ "inform the maintainer of " ++ Pkg.toString pkgName ++ " to get this fixed.\n\n"
-          ++ "In the meantime, you can attempt to get rid of the problematic dependency by\n"
-          ++ "modifying " ++ Path.solvedDependencies ++ ", though that is not a long term\n"
-          ++ "solution."
+dependencyError :: PackageID -> String
+dependencyError (pkgName, version) =
+  let
+    start =
+      "## ERROR in dependency " ++ Pkg.toString pkgName
+      ++ " " ++ V.toString version ++ " "
+  in
+    start ++ replicate (80 - length start) '#' ++ "\n\n"
+    ++ "This error probably means that the '" ++ Pkg.toString pkgName ++ "' has some\n"
+    ++ "a package constraint that is too permissive. You should definitely inform the\n"
+    ++ "maintainer to get this fixed and save other people from this pain.\n\n"
+    ++ "In the meantime, you can attempt to artificially constrain things by adding\n"
+    ++ "some extra constraints to your " ++ Path.description ++ " though that is not\n"
+    ++ "the long term solution.\n\n\n"
 
 
 -- PROGRESS BAR

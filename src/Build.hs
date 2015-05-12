@@ -236,7 +236,7 @@ buildModule env interfaces (moduleID, location) =
                     return (Error moduleID location msg)
 
               Right (interface, js) ->
-                case checkPorts env moduleID interface of
+                case checkPorts env location moduleID interface of
                   Just msg ->
                     return (Error moduleID location msg)
 
@@ -251,21 +251,24 @@ buildModule env interfaces (moduleID, location) =
       Chan.writeChan (resultChan env) (Error moduleID location (show msg))
 
 
-checkPorts :: Env -> ModuleID -> Module.Interface -> Maybe String
-checkPorts env moduleID interface =
+checkPorts :: Env -> Location -> ModuleID -> Module.Interface -> Maybe String
+checkPorts env location moduleID interface =
   case Set.member moduleID (publicModules env) of
     True -> Nothing
     False ->
       case Module.interfacePorts interface of
         [] -> Nothing
-        _ -> Just portError
+        _ -> Just (portError location)
 
 
-portError :: String
-portError =
-    concat
-    [ "Port Error: ports may only appear in the main module. We do not want ports\n"
-    , "    appearing in library code where it adds a non-modular dependency. If I\n"
-    , "    import it twice, what does that really mean? This restriction may be\n"
-    , "    lifted later."
-    ]
+portError :: Location -> String
+portError location =
+  let
+    start = "-- PORT ERROR "
+    end = " " ++ Path.toSource location
+  in
+    start ++ replicate (80 - length start - length end) '-' ++ end ++ "\n\n"
+    ++ "This module has ports, but ports can only appear in the main module.\n\n"
+    ++ "Ports in library code would create hidden dependencies where importing a\n"
+    ++ "module could bring in constraints not captured in the public API. Furthermore,\n"
+    ++ "if the module is imported twice, do we send values out the port twice?"
