@@ -44,16 +44,17 @@ Executable elm-make
         Build,
         CrawlPackage,
         CrawlProject,
-        Display,
         Generate,
         LoadInterfaces,
         Path,
         Paths_elm_make,
+        Report,
         TheMasterPlan,
         Utils.File,
         Utils.Queue
 
     Build-depends:
+        aeson,
         ansi-wl-pprint,
         base >=4.2 && <5,
         binary,

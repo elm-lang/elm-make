@@ -1,6 +1,7 @@
 module Arguments where
 
 import Control.Applicative ((<$>), (<*>), many, optional)
+import qualified Data.List as List
 import Data.Monoid ((<>), mconcat, mempty)
 import Data.Version (showVersion)
 import qualified Options.Applicative as Opt
@@ -8,14 +9,18 @@ import qualified Paths_elm_make as This
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 import qualified Elm.Compiler as Compiler
+import qualified Report
 
 
 data Arguments = Arguments
     { files :: [FilePath]
     , outputFile :: Maybe FilePath
     , autoYes :: Bool
+    , reportType :: Report.Type
     }
 
+
+-- PARSE ARGUMENTS
 
 parse :: IO Arguments
 parse =
@@ -38,6 +43,7 @@ options =
       <$> files
       <*> optional outputFile
       <*> yes
+      <*> reportFlag
   where
     files =
       many (Opt.strArgument ( Opt.metavar "FILES..." ))
@@ -85,3 +91,38 @@ yes =
         [ Opt.long "yes"
         , Opt.help "Reply 'yes' to all automated prompts."
         ]
+
+
+reportFlag :: Opt.Parser Report.Type
+reportFlag =
+  let
+    fromString str =
+      case str of
+        "normal" -> Just Report.Normal
+        "json" -> Just Report.Json
+        _ -> Nothing
+
+    options =
+      mconcat
+        [ Opt.long "report"
+        , Opt.metavar "FORMAT"
+        , Opt.value Report.Normal
+        , Opt.help "Format of error and warning reports (e.g. --report=json)"
+        ]
+  in
+    Opt.option (argReader ["normal","json"] fromString) options
+
+
+argReader :: [String] -> (String -> Maybe a) -> Opt.ReadM a
+argReader options fromString =
+  let reader arg =
+        case fromString arg of
+          Just a ->
+              Right a
+
+          Nothing ->
+              Left $
+                "acceptable arguments to this flag include: "
+                ++ List.intercalate ", " options
+  in
+      Opt.eitherReader reader

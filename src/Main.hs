@@ -63,6 +63,7 @@ run args =
       cachePath <- ask
       liftIO $
         Build.build
+            (Arguments.reportType args)
             numProcessors
             thisPackage
             cachePath

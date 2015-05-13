@@ -1,19 +1,18 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Build where
 
-import Control.Concurrent (ThreadId, myThreadId, forkIO, killThread)
+import Control.Concurrent (ThreadId, myThreadId, forkIO)
 import qualified Control.Concurrent.Chan as Chan
-import qualified Control.Exception as Exception
 import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import qualified Data.Set as Set
 
-import qualified Display
 import qualified Elm.Compiler as Compiler
 import qualified Elm.Compiler.Module as Module
 import qualified Elm.Package.Name as Pkg
 import qualified Path
+import qualified Report
 import qualified Utils.File as File
 import qualified Utils.Queue as Queue
 import qualified TheMasterPlan as TMP
@@ -27,7 +26,7 @@ data Env = Env
     { maxActiveThreads :: Int
     , numTasks :: Int
     , resultChan :: Chan.Chan Result
-    , displayChan :: Chan.Chan Display.Update
+    , reportChan :: Chan.Chan Report.Message
     , reverseDependencies :: Map.Map ModuleID [ModuleID]
     , cachePath :: FilePath
     , publicModules :: Set.Set ModuleID
@@ -43,10 +42,6 @@ data State = State
 
 data CurrentState = Wait | Update
 
-data Result
-    = Error ModuleID Location String
-    | Success ModuleID Module.Interface String ThreadId
-
 
 -- HELPERS for ENV and STATE
 
@@ -59,12 +54,12 @@ initEnv
     -> IO Env
 initEnv numProcessors cachePath publicModules dependencies (BuildSummary blocked _completed) =
   do  resultChan <- Chan.newChan
-      displayChan <- Chan.newChan
+      reportChan <- Chan.newChan
       return $ Env {
           maxActiveThreads = numProcessors,
           numTasks = Map.size blocked,
           resultChan = resultChan,
-          displayChan = displayChan,
+          reportChan = reportChan,
           reverseDependencies = reverseGraph dependencies,
           cachePath = cachePath,
           publicModules = Set.fromList publicModules
@@ -106,37 +101,52 @@ numIncompleteTasks :: State -> Int
 numIncompleteTasks state =
     Set.size (activeThreads state)
     + Queue.size (readyQueue state)
-    + Map.size (blockedModules state)
 
 
 -- PARALLEL BUILDS!!!
 
-build :: Int -> PackageID -> FilePath -> [ModuleID] -> Map.Map ModuleID [ModuleID] -> BuildSummary -> IO ()
-build numProcessors rootPkg cachePath publicModules dependencies summary =
+build
+    :: Report.Type
+    -> Int
+    -> PackageID
+    -> FilePath
+    -> [ModuleID]
+    -> Map.Map ModuleID [ModuleID]
+    -> BuildSummary
+    -> IO ()
+build reportType numProcessors rootPkg cachePath publicModules dependencies summary =
   do  env <- initEnv numProcessors cachePath publicModules dependencies summary
       forkIO (buildManager env (initState summary))
-      Display.display (displayChan env) rootPkg 0 (numTasks env)
+      Report.thread reportType (reportChan env) rootPkg (numTasks env)
 
 
 buildManager :: Env -> State -> IO ()
 buildManager env state =
   case currentState state of
     _ | numIncompleteTasks state == 0 ->
-          Chan.writeChan (displayChan env) Display.Success
+          Chan.writeChan (reportChan env) Report.Close
 
     Wait ->
-      do  result <- Chan.readChan (resultChan env)
+      do  (Result source path moduleID threadId warnings result) <-
+              Chan.readChan (resultChan env)
+
+          if null warnings
+            then return ()
+            else
+              Chan.writeChan (reportChan env)
+                  (Report.Warn moduleID path source warnings)
+
           case result of
-            Success moduleID interface js threadId ->
+            Right (interface, js) ->
               do  let cache = cachePath env
                   File.writeBinary (Path.toInterface cache moduleID) interface
                   writeFile (Path.toObjectFile cache moduleID) js
-                  Chan.writeChan (displayChan env) (Display.Completion moduleID)
+                  Chan.writeChan (reportChan env) (Report.Complete moduleID)
                   buildManager env (registerSuccess env state moduleID interface threadId)
 
-            Error moduleID location msg ->
-              do  mapM killThread (Set.toList (activeThreads state))
-                  Chan.writeChan (displayChan env) (Display.Error moduleID location msg)
+            Left errors ->
+              do  Chan.writeChan (reportChan env) (Report.Error moduleID path source errors)
+                  buildManager env (registerFailure state threadId)
 
     Update ->
       do  let interfaces = completedInterfaces state
@@ -154,32 +164,39 @@ buildManager env state =
                 (maxActiveThreads env - Set.size (activeThreads state))
                 (readyQueue state)
 
-        progress =
-            fromIntegral (numIncompleteTasks state) / fromIntegral (numTasks env)
-
 
 -- WAIT - REGISTER RESULTS
 
+registerFailure :: State -> ThreadId -> State
+registerFailure state threadId =
+  state
+    { currentState = Update
+    , activeThreads = Set.delete threadId (activeThreads state)
+    }
+
+
 registerSuccess :: Env -> State -> ModuleID -> Module.Interface -> ThreadId -> State
 registerSuccess env state name interface threadId =
-    state
-    { currentState =
-        Update
-    , activeThreads =
-        Set.delete threadId (activeThreads state)
-    , blockedModules =
-        updatedBlockedModules
-    , readyQueue =
-        Queue.enqueue (Maybe.catMaybes readyModules) (readyQueue state)
-    , completedInterfaces =
-        Map.insert name interface (completedInterfaces state)
-    }
-  where
+  let
     (updatedBlockedModules, readyModules) =
-        List.mapAccumR
-            (updateBlockedModules name interface)
-            (blockedModules state)
-            (Maybe.fromMaybe [] (Map.lookup name (reverseDependencies env)))
+      List.mapAccumR
+          (updateBlockedModules name interface)
+          (blockedModules state)
+          (Maybe.fromMaybe [] (Map.lookup name (reverseDependencies env)))
+
+    newReadyQueue =
+      Queue.enqueue (Maybe.catMaybes readyModules) (readyQueue state)
+
+    newCompletedInterfaces =
+      Map.insert name interface (completedInterfaces state)
+  in
+    state
+      { currentState = Update
+      , activeThreads = Set.delete threadId (activeThreads state)
+      , blockedModules = updatedBlockedModules
+      , readyQueue = newReadyQueue
+      , completedInterfaces = newCompletedInterfaces
+      }
 
 
 updateBlockedModules
@@ -217,58 +234,27 @@ buildModule
     -> (ModuleID, Location)
     -> IO ()
 buildModule env interfaces (moduleID, location) =
-    Exception.catch compile recover
-  where
-    (Pkg.Name user project) =
-       fst (TMP.packageID moduleID)
-
-    compile =
-      do  let path = Path.toSource location
-          source <- readFile path
-          let ifaces = Map.mapKeysMonotonic TMP.moduleName interfaces
-          let (warnings, rawResult) =
-                  Compiler.compile user project source ifaces
-          result <-
-            case rawResult of
-              Left errors ->
-                let msg = concatMap (Compiler.errorToString path source) errors
-                in
-                    return (Error moduleID location msg)
-
-              Right (interface, js) ->
-                case checkPorts env location moduleID interface of
-                  Just msg ->
-                    return (Error moduleID location msg)
-
-                  Nothing ->
-                    do  threadId <- myThreadId
-                        return (Success moduleID interface js threadId)
-
-          Chan.writeChan (resultChan env) result
-
-    recover :: Exception.SomeException -> IO ()
-    recover msg =
-      Chan.writeChan (resultChan env) (Error moduleID location (show msg))
-
-
-checkPorts :: Env -> Location -> ModuleID -> Module.Interface -> Maybe String
-checkPorts env location moduleID interface =
-  case Set.member moduleID (publicModules env) of
-    True -> Nothing
-    False ->
-      case Module.interfacePorts interface of
-        [] -> Nothing
-        _ -> Just (portError location)
-
-
-portError :: Location -> String
-portError location =
   let
-    start = "-- PORT ERROR "
-    end = " " ++ Path.toSource location
+    (Pkg.Name user project) = fst (TMP.packageID moduleID)
+    path = Path.toSource location
+    ifaces = Map.mapKeysMonotonic TMP.moduleName interfaces
+    isRoot = Set.member moduleID (publicModules env)
   in
-    start ++ replicate (80 - length start - length end) '-' ++ end ++ "\n\n"
-    ++ "This module has ports, but ports can only appear in the main module.\n\n"
-    ++ "Ports in library code would create hidden dependencies where importing a\n"
-    ++ "module could bring in constraints not captured in the public API. Furthermore,\n"
-    ++ "if the module is imported twice, do we send values out the port twice?"
+  do  source <- readFile path
+      let (warnings, rawResult) =
+            Compiler.compile user project isRoot source ifaces
+
+      threadId <- myThreadId
+      let result = Result source path moduleID threadId warnings rawResult
+
+      Chan.writeChan (resultChan env) result
+
+
+data Result = Result
+    { _source :: String
+    , _path :: FilePath
+    , _moduleID :: ModuleID
+    , _threadId :: ThreadId
+    , _warnings :: [Compiler.Warning]
+    , _result :: Either [Compiler.Error] (Module.Interface, String)
+    }
