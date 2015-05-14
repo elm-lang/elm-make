@@ -29,12 +29,12 @@ data Message
 
 -- REPORTING THREAD
 
-thread :: Type -> Chan.Chan Message -> PackageID -> Int -> IO ()
-thread reportType messageChan rootPkg totalTasks =
+thread :: Type -> Bool -> Chan.Chan Message -> PackageID -> Int -> IO ()
+thread reportType warn messageChan rootPkg totalTasks =
   case reportType of
     Normal ->
         do  isTerminal <- hIsTerminalDevice stdout
-            normalLoop isTerminal messageChan rootPkg totalTasks 0 0
+            normalLoop isTerminal warn messageChan rootPkg totalTasks 0 0
 
     Json ->
         jsonLoop messageChan 0
@@ -60,15 +60,20 @@ jsonLoop messageChan failures =
               do  BS.putStrLn (Json.encode errorObjects)
                   jsonLoop messageChan (failures + 1)
 
-        Warn _moduleID _path _source _warnings ->
-            jsonLoop messageChan failures
+        Warn _moduleID path _source warnings ->
+            let
+              warningObjects =
+                map (Compiler.warningToJson path) warnings
+            in
+              do  BS.putStrLn (Json.encode warningObjects)
+                  jsonLoop messageChan failures
 
 
 -- NORMAL LOOP
 
-normalLoop :: Bool -> Chan.Chan Message -> PackageID -> Int -> Int -> Int -> IO ()
-normalLoop isTerminal messageChan rootPkg total successes failures =
-  let go = normalLoop isTerminal messageChan rootPkg total
+normalLoop :: Bool -> Bool -> Chan.Chan Message -> PackageID -> Int -> Int -> Int -> IO ()
+normalLoop isTerminal warn messageChan rootPkg total successes failures =
+  let go = normalLoop isTerminal warn messageChan rootPkg total
   in
   do  when isTerminal $
           do  hPutStr stdout (renderProgressBar successes failures total)
@@ -87,7 +92,7 @@ normalLoop isTerminal messageChan rootPkg total successes failures =
             do  hPutStrLn stdout (closeMessage failures total)
                 when (failures > 0) exitFailure
 
-        Error (ModuleID _name pkg) path source errors ->
+        Error (ModuleID _ pkg) path source errors ->
             do  hFlush stdout
 
                 errors
@@ -97,10 +102,20 @@ normalLoop isTerminal messageChan rootPkg total successes failures =
 
                 go successes (failures + 1)
 
-        Warn _moduleID _path _source _warnings ->
-            go successes failures
+        Warn (ModuleID _ pkg) path source warnings ->
+          if not warn
+            then go successes failures
+            else
+            do  hFlush stdout
 
+                let maybeMessage =
+                      warnings
+                        |> concatMap (Compiler.warningToString path source)
+                        |> warningMessage rootPkg pkg path
 
+                maybe (return ()) (hPutStr stderr) maybeMessage
+
+                go successes failures
 
 
 -- ERROR MESSAGE
@@ -108,30 +123,36 @@ normalLoop isTerminal messageChan rootPkg total successes failures =
 errorMessage :: PackageID -> PackageID -> FilePath -> String -> String
 errorMessage rootPkg errorPkg path msg =
   if errorPkg /= rootPkg
-    then
-      dependencyError errorPkg
-    else
-      let
-        start = "## ERRORS "
-        end = " " ++ path
-      in
-        start ++ replicate (80 - length start - length end) '#' ++ end ++ "\n\n" ++ msg
+    then dependencyError errorPkg
+    else header "ERRORS" path ++ msg
 
 
 dependencyError :: PackageID -> String
 dependencyError (pkgName, version) =
-  let
-    start =
-      "## ERROR in dependency " ++ Pkg.toString pkgName
-      ++ " " ++ V.toString version ++ " "
-  in
-    start ++ replicate (80 - length start) '#' ++ "\n\n"
+    header "ERRORS" ("dependency " ++ Pkg.toString pkgName ++ " " ++ V.toString version)
     ++ "This error probably means that the '" ++ Pkg.toString pkgName ++ "' has some\n"
     ++ "a package constraint that is too permissive. You should definitely inform the\n"
     ++ "maintainer to get this fixed and save other people from this pain.\n\n"
     ++ "In the meantime, you can attempt to artificially constrain things by adding\n"
     ++ "some extra constraints to your " ++ Path.description ++ " though that is not\n"
     ++ "the long term solution.\n\n\n"
+
+
+-- WARNING MESSAGE
+
+warningMessage :: PackageID -> PackageID -> FilePath -> String -> Maybe String
+warningMessage rootPkg warningPkg path msg =
+  if warningPkg /= rootPkg
+    then Nothing
+    else Just (header "WARNINGS" path ++ msg)
+
+
+header :: String -> FilePath -> String
+header title path =
+  let
+    start = "## " ++ title ++ " in " ++ path
+  in
+    start ++ replicate (80 - length start) '#' ++ "\n\n"
 
 
 -- PROGRESS BAR

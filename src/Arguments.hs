@@ -17,6 +17,7 @@ data Arguments = Arguments
     , outputFile :: Maybe FilePath
     , autoYes :: Bool
     , reportType :: Report.Type
+    , warn :: Bool
     }
 
 
@@ -44,6 +45,7 @@ options =
       <*> optional outputFile
       <*> yes
       <*> reportFlag
+      <*> warnFlag
   where
     files =
       many (Opt.strArgument ( Opt.metavar "FILES..." ))
@@ -90,6 +92,15 @@ yes =
         mconcat
         [ Opt.long "yes"
         , Opt.help "Reply 'yes' to all automated prompts."
+        ]
+
+
+warnFlag :: Opt.Parser Bool
+warnFlag =
+    Opt.switch $
+        mconcat
+        [ Opt.long "warn"
+        , Opt.help "Report warnings to improve code quality."
         ]
 
 

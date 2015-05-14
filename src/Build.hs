@@ -107,6 +107,7 @@ numIncompleteTasks state =
 
 build
     :: Report.Type
+    -> Bool
     -> Int
     -> PackageID
     -> FilePath
@@ -114,10 +115,10 @@ build
     -> Map.Map ModuleID [ModuleID]
     -> BuildSummary
     -> IO ()
-build reportType numProcessors rootPkg cachePath publicModules dependencies summary =
+build reportType warn numProcessors rootPkg cachePath publicModules dependencies summary =
   do  env <- initEnv numProcessors cachePath publicModules dependencies summary
       forkIO (buildManager env (initState summary))
-      Report.thread reportType (reportChan env) rootPkg (numTasks env)
+      Report.thread reportType warn (reportChan env) rootPkg (numTasks env)
 
 
 buildManager :: Env -> State -> IO ()

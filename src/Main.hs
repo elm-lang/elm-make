@@ -64,6 +64,7 @@ run args =
       liftIO $
         Build.build
             (Arguments.reportType args)
+            (Arguments.warn args)
             numProcessors
             thisPackage
             cachePath
