@@ -96,35 +96,35 @@ normalLoop isTerminal warn messageChan rootPkg total successes failures =
             do  hFlush stdout
 
                 errors
-                  |> concatMap (Compiler.errorToString path source)
+                  |> mapM_ (Compiler.printError path source)
                   |> errorMessage rootPkg pkg path
-                  |> hPutStr stderr
 
                 go successes (failures + 1)
 
         Warn (ModuleID _ pkg) path source warnings ->
-          if not warn
-            then go successes failures
-            else
-            do  hFlush stdout
-
-                let maybeMessage =
-                      warnings
-                        |> concatMap (Compiler.warningToString path source)
-                        |> warningMessage rootPkg pkg path
-
-                maybe (return ()) (hPutStr stderr) maybeMessage
-
+            if not warn
+              then
                 go successes failures
+              else
+                do  hFlush stdout
+
+                    warnings
+                      |> mapM_ (Compiler.printWarning path source)
+                      |> warningMessage rootPkg pkg path
+
+                    go successes failures
 
 
 -- ERROR MESSAGE
 
-errorMessage :: PackageID -> PackageID -> FilePath -> String -> String
-errorMessage rootPkg errorPkg path msg =
+errorMessage :: PackageID -> PackageID -> FilePath -> IO () -> IO ()
+errorMessage rootPkg errorPkg path printMessage =
   if errorPkg /= rootPkg
-    then dependencyError errorPkg
-    else header "ERRORS" path ++ msg
+    then
+      hPutStr stderr (dependencyError errorPkg)
+    else
+      do  hPutStr stderr (header "ERRORS" path)
+          printMessage
 
 
 dependencyError :: PackageID -> String
@@ -140,17 +140,19 @@ dependencyError (pkgName, version) =
 
 -- WARNING MESSAGE
 
-warningMessage :: PackageID -> PackageID -> FilePath -> String -> Maybe String
-warningMessage rootPkg warningPkg path msg =
+warningMessage :: PackageID -> PackageID -> FilePath -> IO () -> IO ()
+warningMessage rootPkg warningPkg path printMessage =
   if warningPkg /= rootPkg
-    then Nothing
-    else Just (header "WARNINGS" path ++ msg)
+    then return ()
+    else
+      do  hPutStr stderr (header "WARNINGS" path)
+          printMessage
 
 
 header :: String -> FilePath -> String
 header title path =
   let
-    start = "## " ++ title ++ " in " ++ path
+    start = "## " ++ title ++ " in " ++ path ++ " "
   in
     start ++ replicate (80 - length start) '#' ++ "\n\n"
 
