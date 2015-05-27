@@ -13,7 +13,6 @@ import qualified Elm.Package.Name as Pkg
 import qualified Elm.Package.Paths as Path
 import qualified Elm.Package.Version as V
 import Elm.Utils ((|>))
-import qualified Path
 import TheMasterPlan (ModuleID(ModuleID), PackageID)
 
 
@@ -23,8 +22,8 @@ data Type = Normal | Json
 data Message
     = Close
     | Complete ModuleID
-    | Error ModuleID FilePath String [Compiler.Error]
-    | Warn ModuleID FilePath String [Compiler.Warning]
+    | Error ModuleID Compiler.Dealiaser FilePath String [Compiler.Error]
+    | Warn ModuleID Compiler.Dealiaser FilePath String [Compiler.Warning]
 
 
 -- REPORTING THREAD
@@ -52,18 +51,18 @@ jsonLoop messageChan failures =
         Complete _moduleID ->
             jsonLoop messageChan failures
 
-        Error _moduleID path _source errors ->
+        Error _moduleID dealiaser path _source errors ->
             let
               errorObjects =
-                map (Compiler.errorToJson path) errors
+                map (Compiler.errorToJson dealiaser path) errors
             in
               do  BS.putStrLn (Json.encode errorObjects)
                   jsonLoop messageChan (failures + 1)
 
-        Warn _moduleID path _source warnings ->
+        Warn _moduleID dealiaser path _source warnings ->
             let
               warningObjects =
-                map (Compiler.warningToJson path) warnings
+                map (Compiler.warningToJson dealiaser path) warnings
             in
               do  BS.putStrLn (Json.encode warningObjects)
                   jsonLoop messageChan failures
@@ -92,16 +91,16 @@ normalLoop isTerminal warn messageChan rootPkg total successes failures =
             do  hPutStrLn stdout (closeMessage failures total)
                 when (failures > 0) exitFailure
 
-        Error (ModuleID _ pkg) path source errors ->
+        Error (ModuleID _ pkg) dealiaser path source errors ->
             do  hFlush stdout
 
                 errors
-                  |> mapM_ (Compiler.printError path source)
+                  |> mapM_ (Compiler.printError dealiaser path source)
                   |> errorMessage rootPkg pkg path
 
                 go successes (failures + 1)
 
-        Warn (ModuleID _ pkg) path source warnings ->
+        Warn (ModuleID _ pkg) dealiaser path source warnings ->
             if not warn
               then
                 go successes failures
@@ -109,7 +108,7 @@ normalLoop isTerminal warn messageChan rootPkg total successes failures =
                 do  hFlush stdout
 
                     warnings
-                      |> mapM_ (Compiler.printWarning path source)
+                      |> mapM_ (Compiler.printWarning dealiaser path source)
                       |> warningMessage rootPkg pkg path
 
                     go successes failures

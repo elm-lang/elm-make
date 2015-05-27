@@ -128,14 +128,14 @@ buildManager env state =
           Chan.writeChan (reportChan env) Report.Close
 
     Wait ->
-      do  (Result source path moduleID threadId warnings result) <-
+      do  (Result source path moduleID threadId dealiaser warnings result) <-
               Chan.readChan (resultChan env)
 
           if null warnings
             then return ()
             else
               Chan.writeChan (reportChan env)
-                  (Report.Warn moduleID path source warnings)
+                  (Report.Warn moduleID dealiaser path source warnings)
 
           case result of
             Right (interface, js) ->
@@ -146,7 +146,7 @@ buildManager env state =
                   buildManager env (registerSuccess env state moduleID interface threadId)
 
             Left errors ->
-              do  Chan.writeChan (reportChan env) (Report.Error moduleID path source errors)
+              do  Chan.writeChan (reportChan env) (Report.Error moduleID dealiaser path source errors)
                   buildManager env (registerFailure state threadId)
 
     Update ->
@@ -242,11 +242,11 @@ buildModule env interfaces (moduleID, location) =
     isRoot = Set.member moduleID (publicModules env)
   in
   do  source <- readFile path
-      let (warnings, rawResult) =
+      let (dealiaser, warnings, rawResult) =
             Compiler.compile user project isRoot source ifaces
 
       threadId <- myThreadId
-      let result = Result source path moduleID threadId warnings rawResult
+      let result = Result source path moduleID threadId dealiaser warnings rawResult
 
       Chan.writeChan (resultChan env) result
 
@@ -256,6 +256,7 @@ data Result = Result
     , _path :: FilePath
     , _moduleID :: ModuleID
     , _threadId :: ThreadId
+    , _dealiaser :: Compiler.Dealiaser
     , _warnings :: [Compiler.Warning]
     , _result :: Either [Compiler.Error] (Module.Interface, String)
     }

@@ -199,7 +199,7 @@ readPackageData pkgName maybeName filePath =
       return (name, (PackageData filePath deps, addParent (Just name) deps))
   where
     format src msg =
-      Compiler.errorToString filePath src msg
+      Compiler.errorToString Compiler.dummyDealiaser filePath src msg
       ++ "There is probably a problem with the syntax of your imports. For example,\n"
       ++ "import syntax was changed a bit from 0.14 to 0.15:\n\n"
       ++ "    0.14: import Html (..)\n"
