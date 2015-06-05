@@ -130,7 +130,7 @@ dependencyError :: PackageID -> String
 dependencyError (pkgName, version) =
     header "ERRORS" ("dependency " ++ Pkg.toString pkgName ++ " " ++ V.toString version)
     ++ "This error probably means that the '" ++ Pkg.toString pkgName ++ "' has some\n"
-    ++ "a package constraint that is too permissive. You should definitely inform the\n"
+    ++ "package constraint that is too permissive. You should definitely inform the\n"
     ++ "maintainer to get this fixed and save other people from this pain.\n\n"
     ++ "In the meantime, you can attempt to artificially constrain things by adding\n"
     ++ "some extra constraints to your " ++ Path.description ++ " though that is not\n"
