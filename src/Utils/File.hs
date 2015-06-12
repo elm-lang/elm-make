@@ -4,6 +4,7 @@ module Utils.File where
 import Control.Monad.Except (MonadError, throwError, MonadIO, liftIO)
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Binary as Binary
+import GHC.IO.Exception ( IOErrorType(InvalidArgument) )
 import System.Directory (createDirectoryIfMissing, doesFileExist)
 import System.FilePath (dropFileName)
 import System.IO (utf8, hPutStr, hSetEncoding, withBinaryFile, withFile, Handle, IOMode(ReadMode, WriteMode))
@@ -71,8 +72,8 @@ readTextUtf8 name =
 
 convertUtf8Error :: FilePath -> IOError -> IOError
 convertUtf8Error filepath e =
-  case show (ioeGetErrorType e) of
-    "invalid argument" -> utf8Error
+  case ioeGetErrorType e of
+    InvalidArgument -> utf8Error
     _ -> e
   where
     errorMessage = "Bad encoding; the file must be valid UTF-8"
