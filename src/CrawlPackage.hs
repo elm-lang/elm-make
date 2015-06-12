@@ -15,6 +15,7 @@ import qualified Elm.Package.Name as Pkg
 import qualified Elm.Package.Paths as Path
 import qualified Elm.Package.Solution as Solution
 import qualified Elm.Package.Version as V
+import qualified Utils.File as File
 import qualified TheMasterPlan as TMP
 import TheMasterPlan ( PackageSummary(..), PackageData(..) )
 
@@ -180,7 +181,7 @@ readPackageData
     -> FilePath
     -> m (Module.Name, (PackageData, [(Module.Name, Maybe Module.Name)]))
 readPackageData pkgName maybeName filePath =
-  do  sourceCode <- liftIO (readFile filePath)
+  do  sourceCode <- liftIO (File.readStringUtf8 filePath)
 
       (name, rawDeps) <-
           case Compiler.parseDependencies sourceCode of

@@ -141,7 +141,7 @@ buildManager env state =
             Right (interface, js) ->
               do  let cache = cachePath env
                   File.writeBinary (Path.toInterface cache moduleID) interface
-                  writeFile (Path.toObjectFile cache moduleID) js
+                  File.writeStringUtf8 (Path.toObjectFile cache moduleID) js
                   Chan.writeChan (reportChan env) (Report.Complete moduleID)
                   buildManager env (registerSuccess env state moduleID interface threadId)
 
@@ -241,7 +241,7 @@ buildModule env interfaces (moduleID, location) =
     ifaces = Map.mapKeysMonotonic TMP.moduleName interfaces
     isRoot = Set.member moduleID (publicModules env)
   in
-  do  source <- readFile path
+  do  source <- File.readStringUtf8 path
       let (dealiaser, warnings, rawResult) =
             Compiler.compile user project isRoot source ifaces
 
