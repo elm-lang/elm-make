@@ -12,7 +12,7 @@ import qualified Data.Text.Lazy.IO as Text
 import qualified Data.Tree as Tree
 import System.Directory ( createDirectoryIfMissing )
 import System.FilePath ( dropFileName, takeExtension )
-import System.IO ( IOMode(WriteMode), withFile )
+import System.IO ( IOMode(WriteMode) )
 import qualified Text.Blaze as Blaze
 import Text.Blaze.Html5 ((!))
 import qualified Text.Blaze.Html5 as H
@@ -22,6 +22,7 @@ import qualified Text.Blaze.Renderer.Text as Blaze
 import Elm.Utils ((|>))
 import qualified Elm.Compiler.Module as Module
 import qualified Path
+import qualified Utils.File as File
 import TheMasterPlan ( ModuleID(ModuleID), Location )
 
 
@@ -49,18 +50,18 @@ generate cachePath dependencies natives moduleIDs outputFile =
           case moduleIDs of
             [ModuleID moduleName _] ->
               liftIO $
-                do  js <- mapM Text.readFile objectFiles
-                    Text.writeFile outputFile (html (Text.concat (header:js)) moduleName)
+                do  js <- mapM File.lazyReadTextUtf8 objectFiles
+                    File.lazyWriteTextUtf8 outputFile (html (Text.concat (header:js)) moduleName)
 
             _ ->
               throwError (errorNotOneModule moduleIDs)
 
         _ ->
           liftIO $
-          withFile outputFile WriteMode $ \handle ->
+          File.withFileUtf8 outputFile WriteMode $ \handle ->
               do  Text.hPutStrLn handle header
                   forM_ objectFiles $ \jsFile ->
-                      Text.hPutStrLn handle =<< Text.readFile jsFile
+                      Text.hPutStrLn handle =<< File.lazyReadTextUtf8 jsFile
 
       liftIO (putStrLn ("Successfully generated " ++ outputFile))
 

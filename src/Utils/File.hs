@@ -4,9 +4,16 @@ module Utils.File where
 import Control.Monad.Except (MonadError, throwError, MonadIO, liftIO)
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Binary as Binary
+import GHC.IO.Exception ( IOErrorType(InvalidArgument) )
 import System.Directory (createDirectoryIfMissing, doesFileExist)
 import System.FilePath (dropFileName)
-import System.IO (withBinaryFile, IOMode(WriteMode))
+import System.IO (utf8, hPutStr, hSetEncoding, withBinaryFile, withFile, Handle, IOMode(ReadMode, WriteMode))
+import System.IO.Error (IOError, ioeGetErrorType, annotateIOError, modifyIOError)
+
+import qualified Data.Text as Text
+import qualified Data.Text.IO as TextIO
+import qualified Data.Text.Lazy as LazyText
+import qualified Data.Text.Lazy.IO as LazyTextIO
 
 
 writeBinary :: (Binary.Binary a) => FilePath -> a -> IO ()
@@ -41,3 +48,58 @@ errorCorrupted filePath =
 errorNotFound :: FilePath -> String
 errorNotFound filePath =
     "Unable to find file " ++ filePath ++ " for deserialization!"
+
+
+{-|
+  readStringUtf8 converts Text to String instead of reading
+  a String directly because System.IO.hGetContents is lazy,
+  and with lazy IO, decoding exception cannot be caught.
+  By using the strict Text type, we force any decoding
+  exceptions to be thrown so we can show our UTF-8 message.
+-}
+readStringUtf8 :: FilePath -> IO String
+readStringUtf8 name =
+  readTextUtf8 name >>= (return . Text.unpack)
+
+
+readTextUtf8 :: FilePath -> IO Text.Text
+readTextUtf8 name =
+  let action handle =
+        modifyIOError (convertUtf8Error name) (TextIO.hGetContents handle)
+  in
+    withFileUtf8 name ReadMode action
+
+
+convertUtf8Error :: FilePath -> IOError -> IOError
+convertUtf8Error filepath e =
+  case ioeGetErrorType e of
+    InvalidArgument -> utf8Error
+    _ -> e
+  where
+    errorMessage = "Bad encoding; the file must be valid UTF-8"
+    utf8Error = annotateIOError (userError errorMessage) "" Nothing (Just filepath)
+
+
+{-|
+  It is okay to use lazy IO for files created by Elm (ie. object files),
+  because we know they will have the correct encoding.
+  For user provided files, use readStringUtf8 or readTextUtf8!
+-}
+lazyReadTextUtf8 :: FilePath -> IO LazyText.Text
+lazyReadTextUtf8 name =
+  withFileUtf8 name ReadMode LazyTextIO.hGetContents
+
+
+writeStringUtf8 :: FilePath -> String -> IO ()
+writeStringUtf8 f str =
+  withFileUtf8 f WriteMode (\handle -> hPutStr handle str)
+
+
+lazyWriteTextUtf8 :: FilePath -> LazyText.Text -> IO ()
+lazyWriteTextUtf8 f txt =
+  withFileUtf8 f WriteMode (\handle -> LazyTextIO.hPutStr handle txt)
+
+
+withFileUtf8 :: FilePath -> IOMode -> (Handle -> IO a) -> IO a
+withFileUtf8 f mode action =
+  withFile f mode (\handle -> hSetEncoding handle utf8 >> action handle)
