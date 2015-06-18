@@ -7,8 +7,9 @@ import qualified Data.Graph as Graph
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import qualified Data.Set as Set
-import qualified Data.Text.Lazy as Text
-import qualified Data.Text.Lazy.IO as Text
+import qualified Data.Text as Text
+import qualified Data.Text.IO as TextIO
+import qualified Data.Text.Lazy as LazyText
 import qualified Data.Tree as Tree
 import System.Directory ( createDirectoryIfMissing )
 import System.FilePath ( dropFileName, takeExtension )
@@ -50,8 +51,9 @@ generate cachePath dependencies natives moduleIDs outputFile =
           case moduleIDs of
             [ModuleID moduleName _] ->
               liftIO $
-                do  js <- mapM File.lazyReadTextUtf8 objectFiles
-                    File.lazyWriteTextUtf8 outputFile (html (Text.concat (header:js)) moduleName)
+                do  js <- mapM File.readTextUtf8 objectFiles
+                    let outputText = html (LazyText.fromChunks (header:js)) moduleName
+                    File.writeTextUtf8 outputFile (LazyText.toStrict outputText)
 
             _ ->
               throwError (errorNotOneModule moduleIDs)
@@ -59,9 +61,9 @@ generate cachePath dependencies natives moduleIDs outputFile =
         _ ->
           liftIO $
           File.withFileUtf8 outputFile WriteMode $ \handle ->
-              do  Text.hPutStrLn handle header
+              do  TextIO.hPutStrLn handle header
                   forM_ objectFiles $ \jsFile ->
-                      Text.hPutStrLn handle =<< File.lazyReadTextUtf8 jsFile
+                      TextIO.hPutStrLn handle =<< File.readTextUtf8 jsFile
 
       liftIO (putStrLn ("Successfully generated " ++ outputFile))
 
@@ -116,7 +118,7 @@ getReachableObjectFiles moduleNames nodes =
 
 -- GENERATE HTML
 
-html :: Text.Text -> Module.Name -> Text.Text
+html :: LazyText.Text -> Module.Name -> LazyText.Text
 html generatedJavaScript moduleName =
   Blaze.renderMarkup $
     H.docTypeHtml $ do
