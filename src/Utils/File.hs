@@ -7,8 +7,8 @@ import qualified Data.Binary as Binary
 import GHC.IO.Exception ( IOErrorType(InvalidArgument) )
 import System.Directory (createDirectoryIfMissing, doesFileExist)
 import System.FilePath (dropFileName)
-import System.IO (utf8, hPutStr, hSetEncoding, withBinaryFile, withFile, Handle, IOMode(ReadMode, WriteMode))
-import System.IO.Error (IOError, ioeGetErrorType, annotateIOError, modifyIOError)
+import System.IO (utf8, hSetEncoding, withBinaryFile, withFile, Handle, IOMode(ReadMode, WriteMode))
+import System.IO.Error (ioeGetErrorType, annotateIOError, modifyIOError)
 
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
