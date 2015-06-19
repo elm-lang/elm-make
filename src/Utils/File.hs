@@ -12,8 +12,6 @@ import System.IO.Error (IOError, ioeGetErrorType, annotateIOError, modifyIOError
 
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
-import qualified Data.Text.Lazy as LazyText
-import qualified Data.Text.Lazy.IO as LazyTextIO
 
 
 writeBinary :: (Binary.Binary a) => FilePath -> a -> IO ()
@@ -80,24 +78,14 @@ convertUtf8Error filepath e =
     utf8Error = annotateIOError (userError errorMessage) "" Nothing (Just filepath)
 
 
-{-|
-  It is okay to use lazy IO for files created by Elm (ie. object files),
-  because we know they will have the correct encoding.
-  For user provided files, use readStringUtf8 or readTextUtf8!
--}
-lazyReadTextUtf8 :: FilePath -> IO LazyText.Text
-lazyReadTextUtf8 name =
-  withFileUtf8 name ReadMode LazyTextIO.hGetContents
-
-
 writeStringUtf8 :: FilePath -> String -> IO ()
 writeStringUtf8 f str =
-  withFileUtf8 f WriteMode (\handle -> hPutStr handle str)
+  writeTextUtf8 f (Text.pack str)
 
 
-lazyWriteTextUtf8 :: FilePath -> LazyText.Text -> IO ()
-lazyWriteTextUtf8 f txt =
-  withFileUtf8 f WriteMode (\handle -> LazyTextIO.hPutStr handle txt)
+writeTextUtf8 :: FilePath -> Text.Text -> IO ()
+writeTextUtf8 f txt =
+  withFileUtf8 f WriteMode (\handle -> TextIO.hPutStr handle txt)
 
 
 withFileUtf8 :: FilePath -> IOMode -> (Handle -> IO a) -> IO a
