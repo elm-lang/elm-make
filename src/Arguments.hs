@@ -18,6 +18,7 @@ data Arguments = Arguments
     , autoYes :: Bool
     , reportType :: Report.Type
     , warn :: Bool
+    , docs :: Maybe FilePath
     }
 
 
@@ -46,6 +47,7 @@ options =
       <*> yes
       <*> reportFlag
       <*> warnFlag
+      <*> optional docs
   where
     files =
       many (Opt.strArgument ( Opt.metavar "FILES..." ))
@@ -56,6 +58,14 @@ options =
         [ Opt.long "output"
         , Opt.metavar "FILE"
         , Opt.help "Write output to FILE."
+        ]
+
+    docs =
+      Opt.strOption $
+        mconcat
+        [ Opt.long "docs"
+        , Opt.metavar "FILE"
+        , Opt.help "Write documentation to FILE as JSON."
         ]
 
 

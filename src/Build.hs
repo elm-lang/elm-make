@@ -10,6 +10,7 @@ import qualified Data.Set as Set
 
 import qualified Elm.Compiler as Compiler
 import qualified Elm.Compiler.Module as Module
+import qualified Elm.Docs as Docs
 import qualified Elm.Package.Name as Pkg
 import qualified Path
 import qualified Report
@@ -27,10 +28,13 @@ data Env = Env
     , numTasks :: Int
     , resultChan :: Chan.Chan Result
     , reportChan :: Chan.Chan Report.Message
+    , docsChan :: Chan.Chan [Docs.Documentation]
     , reverseDependencies :: Map.Map ModuleID [ModuleID]
     , cachePath :: FilePath
-    , publicModules :: Set.Set ModuleID
+    , exposedModules :: Set.Set ModuleID
+    , modulesForGeneration :: Set.Set ModuleID
     }
+
 
 data State = State
     { currentState :: CurrentState
@@ -38,7 +42,9 @@ data State = State
     , readyQueue :: Queue.Queue (ModuleID, Location)
     , blockedModules :: Map.Map ModuleID BuildData
     , completedInterfaces :: Map.Map ModuleID Module.Interface
+    , documentation :: [Docs.Documentation]
     }
+
 
 data CurrentState = Wait | Update
 
@@ -49,21 +55,25 @@ initEnv
     :: Int
     -> FilePath
     -> [ModuleID]
+    -> [ModuleID]
     -> Map.Map ModuleID [ModuleID]
     -> BuildSummary
     -> IO Env
-initEnv numProcessors cachePath publicModules dependencies (BuildSummary blocked _completed) =
+initEnv numProcessors cachePath exposedModules modulesForGeneration dependencies (BuildSummary blocked _completed) =
   do  resultChan <- Chan.newChan
       reportChan <- Chan.newChan
-      return $ Env {
-          maxActiveThreads = numProcessors,
-          numTasks = Map.size blocked,
-          resultChan = resultChan,
-          reportChan = reportChan,
-          reverseDependencies = reverseGraph dependencies,
-          cachePath = cachePath,
-          publicModules = Set.fromList publicModules
-      }
+      docsChan <- Chan.newChan
+      return $ Env
+        { maxActiveThreads = numProcessors
+        , numTasks = Map.size blocked
+        , resultChan = resultChan
+        , reportChan = reportChan
+        , docsChan = docsChan
+        , reverseDependencies = reverseGraph dependencies
+        , cachePath = cachePath
+        , exposedModules = Set.fromList exposedModules
+        , modulesForGeneration = Set.fromList modulesForGeneration
+        }
 
 
 -- reverse dependencies, "who depends on me?"
@@ -80,13 +90,14 @@ reverseGraph graph =
 
 initState :: BuildSummary -> State
 initState (BuildSummary blocked completed) =
-    State {
-        currentState = Update,
-        activeThreads = Set.empty,
-        readyQueue = Queue.fromList (Map.elems readyModules),
-        blockedModules = blockedModules,
-        completedInterfaces = completed
-    }
+    State
+      { currentState = Update
+      , activeThreads = Set.empty
+      , readyQueue = Queue.fromList (Map.elems readyModules)
+      , blockedModules = blockedModules
+      , completedInterfaces = completed
+      , documentation = []
+      }
   where
     (readyModules, blockedModules) =
         Map.mapEitherWithKey categorize blocked
@@ -112,20 +123,23 @@ build
     -> PackageID
     -> FilePath
     -> [ModuleID]
+    -> [ModuleID]
     -> Map.Map ModuleID [ModuleID]
     -> BuildSummary
-    -> IO ()
-build reportType warn numProcessors rootPkg cachePath publicModules dependencies summary =
-  do  env <- initEnv numProcessors cachePath publicModules dependencies summary
+    -> IO [Docs.Documentation]
+build reportType warn numProcessors rootPkg cachePath exposedModules modulesForGeneration dependencies summary =
+  do  env <- initEnv numProcessors cachePath exposedModules modulesForGeneration dependencies summary
       forkIO (buildManager env (initState summary))
       Report.thread reportType warn (reportChan env) rootPkg (numTasks env)
+      Chan.readChan (docsChan env)
 
 
 buildManager :: Env -> State -> IO ()
 buildManager env state =
   case currentState state of
     _ | numIncompleteTasks state == 0 ->
-          Chan.writeChan (reportChan env) Report.Close
+      do  Chan.writeChan (reportChan env) Report.Close
+          Chan.writeChan (docsChan env) (documentation state)
 
     Wait ->
       do  (Result source path moduleID threadId dealiaser warnings result) <-
@@ -138,12 +152,12 @@ buildManager env state =
                   (Report.Warn moduleID dealiaser path source warnings)
 
           case result of
-            Right (interface, js) ->
+            Right (Compiler.Result maybeDocs interface js) ->
               do  let cache = cachePath env
                   File.writeBinary (Path.toInterface cache moduleID) interface
-                  File.writeStringUtf8 (Path.toObjectFile cache moduleID) js
+                  writeFile (Path.toObjectFile cache moduleID) js
                   Chan.writeChan (reportChan env) (Report.Complete moduleID)
-                  buildManager env (registerSuccess env state moduleID interface threadId)
+                  buildManager env (registerSuccess env state moduleID interface maybeDocs threadId)
 
             Left errors ->
               do  Chan.writeChan (reportChan env) (Report.Error moduleID dealiaser path source errors)
@@ -176,8 +190,15 @@ registerFailure state threadId =
     }
 
 
-registerSuccess :: Env -> State -> ModuleID -> Module.Interface -> ThreadId -> State
-registerSuccess env state name interface threadId =
+registerSuccess
+    :: Env
+    -> State
+    -> ModuleID
+    -> Module.Interface
+    -> Maybe Docs.Documentation
+    -> ThreadId
+    -> State
+registerSuccess env state name interface maybeDocs threadId =
   let
     (updatedBlockedModules, readyModules) =
       List.mapAccumR
@@ -197,6 +218,7 @@ registerSuccess env state name interface threadId =
       , blockedModules = updatedBlockedModules
       , readyQueue = newReadyQueue
       , completedInterfaces = newCompletedInterfaces
+      , documentation = maybe id (:) maybeDocs (documentation state)
       }
 
 
@@ -239,14 +261,20 @@ buildModule env interfaces (moduleID, location) =
     (Pkg.Name user project) = fst (TMP.packageID moduleID)
     path = Path.toSource location
     ifaces = Map.mapKeysMonotonic TMP.moduleName interfaces
-    isRoot = Set.member moduleID (publicModules env)
+    isRoot = Set.member moduleID (modulesForGeneration env)
+    isExposed = Set.member moduleID (exposedModules env)
   in
-  do  source <- File.readStringUtf8 path
+  do  source <- readFile path
+
+      let context =
+            Compiler.Context user project isRoot isExposed
+
       let (dealiaser, warnings, rawResult) =
-            Compiler.compile user project isRoot source ifaces
+            Compiler.compile context source ifaces
 
       threadId <- myThreadId
-      let result = Result source path moduleID threadId dealiaser warnings rawResult
+      let result =
+            Result source path moduleID threadId dealiaser warnings rawResult
 
       Chan.writeChan (resultChan env) result
 
@@ -258,5 +286,5 @@ data Result = Result
     , _threadId :: ThreadId
     , _dealiaser :: Compiler.Dealiaser
     , _warnings :: [Compiler.Warning]
-    , _result :: Either [Compiler.Error] (Module.Interface, String)
+    , _result :: Either [Compiler.Error] Compiler.Result
     }

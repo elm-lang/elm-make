@@ -54,29 +54,33 @@ run args =
   do  numProcessors <- liftIO getNumProcessors
       liftIO (setNumCapabilities numProcessors)
 
-      (thisPackage, publicModules, projectSummary) <-
+      (thisPackage, exposedModules, moduleForGeneration, projectSummary) <-
           crawl (Arguments.autoYes args) (Arguments.files args)
 
       let dependencies = Map.map projectDependencies (projectData projectSummary)
       buildSummary <- LoadInterfaces.prepForBuild projectSummary
 
       cachePath <- ask
-      liftIO $
-        Build.build
+      docs <-
+        liftIO $
+          Build.build
             (Arguments.reportType args)
             (Arguments.warn args)
             numProcessors
             thisPackage
             cachePath
-            publicModules
+            exposedModules
+            moduleForGeneration
             dependencies
             buildSummary
+
+      maybe (return ()) (Generate.docs docs) (Arguments.docs args)
 
       Generate.generate
           cachePath
           dependencies
           (projectNatives projectSummary)
-          publicModules
+          moduleForGeneration
           (maybe "elm.js" id (Arguments.outputFile args))
 
 
@@ -84,7 +88,7 @@ crawl
     :: (MonadIO m, MonadError String m)
     => Bool
     -> [FilePath]
-    -> m (PackageID, [ModuleID], ProjectSummary Location)
+    -> m (PackageID, [ModuleID], [ModuleID], ProjectSummary Location)
 crawl autoYes filePaths =
   do  solution <- getSolution autoYes
 
@@ -98,7 +102,7 @@ crawl autoYes filePaths =
 
       desc <- Desc.read Path.description
 
-      (moduleNames, packageSummary) <-
+      (moduleForGeneration, packageSummary) <-
           case filePaths of
             [] ->
               do  summary <- CrawlPackage.dfsFromExposedModules "." solution desc
@@ -114,7 +118,8 @@ crawl autoYes filePaths =
 
       return
           ( thisPackage
-          , map (\n -> ModuleID n thisPackage) moduleNames
+          , map (\n -> ModuleID n thisPackage) (Desc.exposed desc)
+          , map (\n -> ModuleID n thisPackage) moduleForGeneration
           , List.foldl1 CrawlProject.union (summary : summaries)
           )
 

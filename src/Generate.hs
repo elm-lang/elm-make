@@ -3,13 +3,13 @@
 module Generate where
 
 import Control.Monad.Except (MonadError, MonadIO, forM_, liftIO, throwError)
+import qualified Data.ByteString.Lazy as BS
 import qualified Data.Graph as Graph
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
-import qualified Data.Text.Lazy as LazyText
 import qualified Data.Tree as Tree
 import System.Directory ( createDirectoryIfMissing )
 import System.FilePath ( dropFileName, takeExtension )
@@ -18,14 +18,24 @@ import qualified Text.Blaze as Blaze
 import Text.Blaze.Html5 ((!))
 import qualified Text.Blaze.Html5 as H
 import qualified Text.Blaze.Html5.Attributes as A
-import qualified Text.Blaze.Renderer.Text as Blaze
+import qualified Text.Blaze.Renderer.Utf8 as Blaze
 
 import Elm.Utils ((|>))
 import qualified Elm.Compiler.Module as Module
+import qualified Elm.Docs as Docs
 import qualified Path
-import qualified Utils.File as File
 import TheMasterPlan ( ModuleID(ModuleID), Location )
+import qualified Utils.File as File
 
+
+-- GENERATE DOCS
+
+docs :: (MonadIO m) => [Docs.Documentation] -> FilePath -> m ()
+docs docsList path =
+  liftIO (BS.writeFile path (Docs.prettyJson docsList))
+
+
+-- GENERATE ELM STUFF
 
 generate
     :: (MonadIO m, MonadError String m)
@@ -52,8 +62,8 @@ generate cachePath dependencies natives moduleIDs outputFile =
             [ModuleID moduleName _] ->
               liftIO $
                 do  js <- mapM File.readTextUtf8 objectFiles
-                    let outputText = html (LazyText.fromChunks (header:js)) moduleName
-                    File.writeTextUtf8 outputFile (LazyText.toStrict outputText)
+                    let outputText = html (Text.concat (header:js)) moduleName
+                    BS.writeFile outputFile outputText
 
             _ ->
               throwError (errorNotOneModule moduleIDs)
@@ -118,7 +128,7 @@ getReachableObjectFiles moduleNames nodes =
 
 -- GENERATE HTML
 
-html :: LazyText.Text -> Module.Name -> LazyText.Text
+html :: Text.Text -> Module.Name -> BS.ByteString
 html generatedJavaScript moduleName =
   Blaze.renderMarkup $
     H.docTypeHtml $ do
