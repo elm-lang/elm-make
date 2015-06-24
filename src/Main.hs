@@ -6,6 +6,7 @@ import Control.Monad.Except (MonadError, runExceptT, MonadIO, liftIO)
 import Control.Monad.Reader (MonadReader, runReaderT, ask)
 import qualified Data.List as List
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
 import System.Exit (exitFailure)
@@ -57,8 +58,14 @@ run args =
       (thisPackage, exposedModules, moduleForGeneration, projectSummary) <-
           crawl (Arguments.autoYes args) (Arguments.files args)
 
-      let dependencies = Map.map projectDependencies (projectData projectSummary)
-      buildSummary <- LoadInterfaces.prepForBuild projectSummary
+      let dependencies =
+            Map.map projectDependencies (projectData projectSummary)
+
+      let modulesToDocument =
+            maybe Set.empty (const exposedModules) (Arguments.docs args)
+
+      buildSummary <-
+          LoadInterfaces.prepForBuild modulesToDocument projectSummary
 
       cachePath <- ask
       docs <-
@@ -88,7 +95,7 @@ crawl
     :: (MonadIO m, MonadError String m)
     => Bool
     -> [FilePath]
-    -> m (PackageID, [ModuleID], [ModuleID], ProjectSummary Location)
+    -> m (PackageID, Set.Set ModuleID, [ModuleID], ProjectSummary Location)
 crawl autoYes filePaths =
   do  solution <- getSolution autoYes
 
@@ -116,10 +123,13 @@ crawl autoYes filePaths =
       let summary =
             CrawlProject.canonicalizePackageSummary thisPackage packageSummary
 
+      let localize moduleName =
+            ModuleID moduleName thisPackage
+
       return
           ( thisPackage
-          , map (\n -> ModuleID n thisPackage) (Desc.exposed desc)
-          , map (\n -> ModuleID n thisPackage) moduleForGeneration
+          , Set.fromList (map localize (Desc.exposed desc))
+          , map localize moduleForGeneration
           , List.foldl1 CrawlProject.union (summary : summaries)
           )
 

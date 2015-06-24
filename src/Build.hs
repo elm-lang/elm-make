@@ -54,7 +54,7 @@ data CurrentState = Wait | Update
 initEnv
     :: Int
     -> FilePath
-    -> [ModuleID]
+    -> Set.Set ModuleID
     -> [ModuleID]
     -> Map.Map ModuleID [ModuleID]
     -> BuildSummary
@@ -71,7 +71,7 @@ initEnv numProcessors cachePath exposedModules modulesForGeneration dependencies
         , docsChan = docsChan
         , reverseDependencies = reverseGraph dependencies
         , cachePath = cachePath
-        , exposedModules = Set.fromList exposedModules
+        , exposedModules = exposedModules
         , modulesForGeneration = Set.fromList modulesForGeneration
         }
 
@@ -122,7 +122,7 @@ build
     -> Int
     -> PackageID
     -> FilePath
-    -> [ModuleID]
+    -> Set.Set ModuleID
     -> [ModuleID]
     -> Map.Map ModuleID [ModuleID]
     -> BuildSummary

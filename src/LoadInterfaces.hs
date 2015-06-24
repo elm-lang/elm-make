@@ -5,6 +5,7 @@ import Control.Monad.Except (MonadError, MonadIO, liftIO, throwError)
 import Control.Monad.Reader (MonadReader, ask)
 import qualified Data.Graph as Graph
 import qualified Data.List as List
+import qualified Data.Set as Set
 import Data.Map ((!))
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
@@ -22,11 +23,12 @@ import TheMasterPlan
 
 prepForBuild
     :: (MonadIO m, MonadError String m, MonadReader FilePath m)
-    => ProjectSummary Location
+    => Set.Set ModuleID
+    -> ProjectSummary Location
     -> m BuildSummary
-prepForBuild (ProjectSummary projectData _projectNatives) =
+prepForBuild modulesToDocument (ProjectSummary projectData _projectNatives) =
   do  enhancedData <- addInterfaces projectData
-      filteredData <- filterStaleInterfaces enhancedData
+      filteredData <- filterStaleInterfaces modulesToDocument enhancedData
       return (toBuildSummary filteredData)
 
 
@@ -88,28 +90,36 @@ isMain (ModuleID (Module.Name names) _) =
 
 filterStaleInterfaces
     :: (MonadError String m)
-    => Map.Map ModuleID (ProjectData (Location, Maybe Module.Interface))
+    => Set.Set ModuleID
+    -> Map.Map ModuleID (ProjectData (Location, Maybe Module.Interface))
     -> m (Map.Map ModuleID (ProjectData (Either Location Module.Interface)))
-filterStaleInterfaces summary =
+filterStaleInterfaces modulesToDocument summary =
   do  sortedNames <- topologicalSort (Map.map projectDependencies summary)
-      return (List.foldl' (filterIfStale summary) Map.empty sortedNames)
+      return (List.foldl' (filterIfStale summary modulesToDocument) Map.empty sortedNames)
 
 
 filterIfStale
     :: Map.Map ModuleID (ProjectData (Location, Maybe Module.Interface))
+    -> Set.Set ModuleID
     -> Map.Map ModuleID (ProjectData (Either Location Module.Interface))
     -> ModuleID
     -> Map.Map ModuleID (ProjectData (Either Location Module.Interface))
-filterIfStale enhancedSummary filteredSummary moduleName =
+filterIfStale enhancedSummary modulesToDocument filteredSummary moduleName =
     Map.insert moduleName (ProjectData trueLocation deps) filteredSummary
   where
     (ProjectData (filePath, maybeInterface) deps) =
         enhancedSummary ! moduleName
 
+    depsAreDone =
+      all (haveInterface filteredSummary) deps
+
+    needsDocs =
+      Set.member moduleName modulesToDocument
+
     trueLocation =
         case maybeInterface of
           Just interface
-            | all (haveInterface filteredSummary) deps ->
+            | depsAreDone && not needsDocs ->
                 Right interface
 
           _ -> Left filePath
