@@ -72,7 +72,16 @@ jsonLoop messageChan failures =
 
 normalLoop :: Bool -> Bool -> Chan.Chan Message -> PackageID -> Int -> Int -> Int -> IO ()
 normalLoop isTerminal warn messageChan rootPkg total successes failures =
-  let go = normalLoop isTerminal warn messageChan rootPkg total
+  let
+    go =
+      normalLoop isTerminal warn messageChan rootPkg total
+
+    put withColor withoutColor dealiaser path source errors =
+      if isTerminal then
+        withColor dealiaser path source errors
+      else
+        hPutStr stderr (withoutColor dealiaser path source errors)
+
   in
   do  when isTerminal $
           do  hPutStr stdout (renderProgressBar successes failures total)
@@ -95,23 +104,22 @@ normalLoop isTerminal warn messageChan rootPkg total successes failures =
             do  hFlush stdout
 
                 errors
-                  |> mapM_ (Compiler.printError dealiaser path source)
+                  |> mapM_ (put Compiler.printError Compiler.errorToString dealiaser path source)
                   |> errorMessage rootPkg pkg path
 
                 go successes (failures + 1)
 
         Warn (ModuleID _ pkg) dealiaser path source warnings ->
-            if not warn
-              then
-                go successes failures
-              else
-                do  hFlush stdout
+            if not warn then
+              go successes failures
+            else
+              do  hFlush stdout
 
-                    warnings
-                      |> mapM_ (Compiler.printWarning dealiaser path source)
-                      |> warningMessage rootPkg pkg path
+                  warnings
+                    |> mapM_ (put Compiler.printWarning Compiler.warningToString dealiaser path source)
+                    |> warningMessage rootPkg pkg path
 
-                    go successes failures
+                  go successes failures
 
 
 -- ERROR MESSAGE
