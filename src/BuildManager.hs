@@ -42,7 +42,7 @@ outputFilePath config =
 
 artifactDirectory :: FilePath
 artifactDirectory =
-    Path.stuffDirectory </> "build-artifacts"
+    Path.stuffDirectory </> "build-artifacts" </> Compiler.version
 
 
 -- RUN A BUILD
