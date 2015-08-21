@@ -1,8 +1,7 @@
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
-module Generate where
+module Pipeline.Generate where
 
-import Control.Monad.Except (MonadError, MonadIO, forM_, liftIO, throwError)
+import Control.Monad.Except (forM_, liftIO)
 import qualified Data.Graph as Graph
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
@@ -13,8 +12,11 @@ import qualified Data.Text.Lazy as LazyText
 import qualified Data.Text.Lazy.Encoding as LazyText
 import qualified Data.Text.Lazy.IO as LazyText
 import qualified Data.Tree as Tree
+import Elm.Utils ((|>))
+import qualified Elm.Compiler.Module as Module
+import qualified Elm.Docs as Docs
 import System.Directory ( createDirectoryIfMissing )
-import System.FilePath ( dropFileName, takeExtension )
+import System.FilePath ( dropFileName )
 import System.IO ( IOMode(WriteMode) )
 import qualified Text.Blaze as Blaze
 import Text.Blaze.Html5 ((!))
@@ -22,17 +24,15 @@ import qualified Text.Blaze.Html5 as H
 import qualified Text.Blaze.Html5.Attributes as A
 import qualified Text.Blaze.Renderer.Text as Blaze
 
-import Elm.Utils ((|>))
-import qualified Elm.Compiler.Module as Module
-import qualified Elm.Docs as Docs
+import qualified BuildManager as BM
 import qualified Path
-import TheMasterPlan ( ModuleID(ModuleID), Location )
+import TheMasterPlan ( CanonicalModule(CanonicalModule), Location )
 import qualified Utils.File as File
 
 
 -- GENERATE DOCS
 
-docs :: (MonadIO m) => [Docs.Documentation] -> FilePath -> m ()
+docs :: [Docs.Documentation] -> FilePath -> BM.Task ()
 docs docsList path =
   Docs.prettyJson docsList
     |> LazyText.decodeUtf8
@@ -44,37 +44,32 @@ docs docsList path =
 -- GENERATE ELM STUFF
 
 generate
-    :: (MonadIO m, MonadError String m)
-    => FilePath
-    -> Map.Map ModuleID [ModuleID]
-    -> Map.Map ModuleID Location
-    -> [ModuleID]
-    -> FilePath
-    -> m ()
+    :: BM.Config
+    -> Map.Map CanonicalModule [CanonicalModule]
+    -> Map.Map CanonicalModule Location
+    -> [CanonicalModule]
+    -> BM.Task ()
 
-generate _cachePath _dependencies _natives [] _outputFile =
+generate _config _dependencies _natives [] =
   return ()
 
-generate cachePath dependencies natives moduleIDs outputFile =
+generate config dependencies natives rootModules =
   do  let objectFiles =
-            setupNodes cachePath dependencies natives
-              |> getReachableObjectFiles moduleIDs
+            setupNodes (BM._artifactDirectory config) dependencies natives
+              |> getReachableObjectFiles rootModules
 
+      let outputFile = BM.outputFilePath config
       liftIO (createDirectoryIfMissing True (dropFileName outputFile))
 
-      case takeExtension outputFile of
-        ".html" ->
-          case moduleIDs of
-            [ModuleID moduleName _] ->
-              liftIO $
-                do  js <- mapM File.readTextUtf8 objectFiles
-                    let outputText = html (Text.concat (header:js)) moduleName
-                    LazyText.writeFile outputFile outputText
+      case BM._output config of
+        BM.Html outputFile ->
+            liftIO $
+              do  js <- mapM File.readTextUtf8 objectFiles
+                  let (Just (CanonicalModule _ moduleName)) = Maybe.listToMaybe rootModules
+                  let outputText = html (Text.concat (header:js)) moduleName
+                  LazyText.writeFile outputFile outputText
 
-            _ ->
-              throwError (errorNotOneModule moduleIDs)
-
-        _ ->
+        BM.JS outputFile ->
           liftIO $
           File.withFileUtf8 outputFile WriteMode $ \handle ->
               do  Text.hPutStrLn handle header
@@ -89,20 +84,11 @@ header =
     "var Elm = Elm || { Native: {} };"
 
 
-errorNotOneModule :: [ModuleID] -> String
-errorNotOneModule names =
-    unlines
-    [ "You have specified an HTML output file, so elm-make is attempting to\n"
-    , "generate a fullscreen Elm program as HTML. To do this, elm-make must get\n"
-    , "exactly one input file, but you have given " ++ show (length names) ++ "."
-    ]
-
-
 setupNodes
     :: FilePath
-    -> Map.Map ModuleID [ModuleID]
-    -> Map.Map ModuleID Location
-    -> [(FilePath, ModuleID, [ModuleID])]
+    -> Map.Map CanonicalModule [CanonicalModule]
+    -> Map.Map CanonicalModule Location
+    -> [(FilePath, CanonicalModule, [CanonicalModule])]
 setupNodes cachePath dependencies natives =
     let nativeNodes =
             Map.toList natives
@@ -116,8 +102,8 @@ setupNodes cachePath dependencies natives =
 
 
 getReachableObjectFiles
-    :: [ModuleID]
-    -> [(FilePath, ModuleID, [ModuleID])]
+    :: [CanonicalModule]
+    -> [(FilePath, CanonicalModule, [CanonicalModule])]
     -> [FilePath]
 getReachableObjectFiles moduleNames nodes =
     let (dependencyGraph, vertexToKey, keyToVertex) =

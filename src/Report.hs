@@ -4,16 +4,16 @@ import qualified Control.Concurrent.Chan as Chan
 import Control.Monad (when)
 import qualified Data.Aeson as Json
 import qualified Data.ByteString.Lazy.Char8 as BS
-import GHC.IO.Handle (hIsTerminalDevice)
-import System.Exit (exitFailure)
-import System.IO (hFlush, hPutStr, hPutStrLn, stderr, stdout)
-
 import qualified Elm.Compiler as Compiler
 import qualified Elm.Package.Name as Pkg
 import qualified Elm.Package.Paths as Path
 import qualified Elm.Package.Version as V
 import Elm.Utils ((|>))
-import TheMasterPlan (ModuleID(ModuleID), PackageID)
+import GHC.IO.Handle (hIsTerminalDevice)
+import System.Exit (exitFailure)
+import System.IO (hFlush, hPutStr, hPutStrLn, stderr, stdout)
+
+import TheMasterPlan (CanonicalModule(CanonicalModule), Package)
 
 
 data Type = Normal | Json
@@ -21,14 +21,14 @@ data Type = Normal | Json
 
 data Message
     = Close
-    | Complete ModuleID
-    | Error ModuleID Compiler.Dealiaser FilePath String [Compiler.Error]
-    | Warn ModuleID Compiler.Dealiaser FilePath String [Compiler.Warning]
+    | Complete CanonicalModule
+    | Error CanonicalModule Compiler.Dealiaser FilePath String [Compiler.Error]
+    | Warn CanonicalModule Compiler.Dealiaser FilePath String [Compiler.Warning]
 
 
 -- REPORTING THREAD
 
-thread :: Type -> Bool -> Chan.Chan Message -> PackageID -> Int -> IO ()
+thread :: Type -> Bool -> Chan.Chan Message -> Package -> Int -> IO ()
 thread reportType warn messageChan rootPkg totalTasks =
   case reportType of
     Normal ->
@@ -70,7 +70,7 @@ jsonLoop messageChan failures =
 
 -- NORMAL LOOP
 
-normalLoop :: Bool -> Bool -> Chan.Chan Message -> PackageID -> Int -> Int -> Int -> IO ()
+normalLoop :: Bool -> Bool -> Chan.Chan Message -> Package -> Int -> Int -> Int -> IO ()
 normalLoop isTerminal warn messageChan rootPkg total successes failures =
   let
     go =
@@ -100,7 +100,7 @@ normalLoop isTerminal warn messageChan rootPkg total successes failures =
             do  hPutStrLn stdout (closeMessage failures total)
                 when (failures > 0) exitFailure
 
-        Error (ModuleID _ pkg) dealiaser path source errors ->
+        Error (CanonicalModule pkg _) dealiaser path source errors ->
             do  hFlush stdout
 
                 errors
@@ -109,7 +109,7 @@ normalLoop isTerminal warn messageChan rootPkg total successes failures =
 
                 go successes (failures + 1)
 
-        Warn (ModuleID _ pkg) dealiaser path source warnings ->
+        Warn (CanonicalModule pkg _) dealiaser path source warnings ->
             if not warn then
               go successes failures
             else
@@ -124,9 +124,9 @@ normalLoop isTerminal warn messageChan rootPkg total successes failures =
 
 -- ERROR MESSAGE
 
-errorMessage :: PackageID -> PackageID -> FilePath -> IO () -> IO ()
+errorMessage :: Package -> Package -> FilePath -> IO () -> IO ()
 errorMessage rootPkg errorPkg path printMessage =
-  if errorPkg /= rootPkg
+  if False -- TODO -- errorPkg /= rootPkg
     then
       hPutStr stderr (dependencyError errorPkg)
     else
@@ -134,7 +134,7 @@ errorMessage rootPkg errorPkg path printMessage =
           printMessage
 
 
-dependencyError :: PackageID -> String
+dependencyError :: Package -> String
 dependencyError (pkgName, version) =
     header "ERRORS" ("dependency " ++ Pkg.toString pkgName ++ " " ++ V.toString version)
     ++ "This error probably means that the '" ++ Pkg.toString pkgName ++ "' has some\n"
@@ -147,7 +147,7 @@ dependencyError (pkgName, version) =
 
 -- WARNING MESSAGE
 
-warningMessage :: PackageID -> PackageID -> FilePath -> IO () -> IO ()
+warningMessage :: Package -> Package -> FilePath -> IO () -> IO ()
 warningMessage rootPkg warningPkg path printMessage =
   if warningPkg /= rootPkg
     then return ()
