@@ -6,6 +6,8 @@ data we have so far" formatted in a way that will be nice for the next stage.
 The idea is that our implementation should be guiding us between these models.
 -}
 
+import Control.Applicative ((<$>), (<*>))
+import Data.Binary
 import qualified Data.Map as Map
 import qualified Elm.Compiler.Module as Module
 import qualified Elm.Package.Name as Pkg
@@ -107,3 +109,39 @@ data BuildData = BuildData
     , location :: Location
     }
 
+
+-- BINARY
+
+instance Binary CanonicalModule where
+  get =
+    CanonicalModule <$> get <*> get
+
+  put (CanonicalModule pkg nm) =
+    do  put pkg
+        put nm
+
+
+instance (Binary a) => Binary (ProjectGraph a) where
+  get =
+    ProjectGraph <$> get <*> get
+
+  put (ProjectGraph elms jss) =
+    do  put elms
+        put jss
+
+
+instance (Binary a) => Binary (ProjectData a) where
+  get =
+    ProjectData <$> get <*> get
+
+  put (ProjectData locations dependencies) =
+    put locations >> put dependencies
+
+
+instance Binary Location where
+  get =
+    Location <$> get <*> get
+
+  put (Location relative pkg) =
+    do  put relative
+        put pkg

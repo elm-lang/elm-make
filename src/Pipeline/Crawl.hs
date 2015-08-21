@@ -1,8 +1,7 @@
 {-# OPTIONS_GHC -Wall #-}
 module Pipeline.Crawl where
 
-import Control.Monad (forM)
-import Control.Monad.Except (liftIO, withExceptT)
+import Control.Monad.Except (catchError, liftIO, withExceptT)
 import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -16,19 +15,21 @@ import System.Directory (doesFileExist)
 import System.FilePath ((</>))
 
 import qualified BuildManager as BM
+import qualified Path
 import qualified Pipeline.Crawl.Package as CrawlPackage
 import TheMasterPlan
     ( CanonicalModule(CanonicalModule), Package, Location(Location)
     , PackageGraph(..), PackageData(..)
     , ProjectGraph(..), ProjectData(..)
     )
+import qualified Utils.File as File
 
 
 data ProjectInfo = ProjectInfo
     { _package :: Package
     , _exposedModules :: Set.Set CanonicalModule
     , _allModules :: [CanonicalModule]
-    , _summary :: ProjectGraph Location
+    , _graph :: ProjectGraph Location
     }
 
 
@@ -36,14 +37,7 @@ crawl :: BM.Config -> BM.Task ProjectInfo
 crawl config =
   do  solution <- getSolution (BM._autoYes config)
 
-      summaries <-
-          forM (Map.toList solution) $ \(name,version) ->
-            BM.phase (Pkg.toString name) $ do
-              let root = Path.package name version
-              desc <- withExceptT BM.PackageProblem (Desc.read (root </> Path.description))
-              packageGraph <- CrawlPackage.dfsFromExposedModules root solution desc
-              return (canonicalizePackageGraph (name,version) packageGraph)
-
+      depGraphs <- mapM (crawlDependency config solution) (Map.toList solution)
 
       desc <- withExceptT BM.PackageProblem (Desc.read Path.description)
 
@@ -53,7 +47,7 @@ crawl config =
       let thisPackage =
             (Desc.name desc, Desc.version desc)
 
-      let summary =
+      let graph =
             canonicalizePackageGraph thisPackage packageGraph
 
       let localize moduleName =
@@ -63,7 +57,7 @@ crawl config =
           thisPackage
           (Set.fromList (map localize (Desc.exposed desc)))
           (map localize moduleForGeneration)
-          (List.foldl1 union (summary : summaries))
+          (List.foldl1 union (graph : depGraphs))
 
 
 getSolution :: Bool -> BM.Task Solution.Solution
@@ -74,6 +68,25 @@ getSolution autoYes =
           Solution.read Path.solvedDependencies
         else
           Initialize.solution autoYes
+
+
+crawlDependency
+    :: BM.Config
+    -> Solution.Solution
+    -> Package
+    -> BM.Task (ProjectGraph Location)
+crawlDependency config solution pkg@(name,version) =
+  let
+    root = Path.package name version
+    cache = Path.toPackageCacheFile (BM._artifactDirectory config) pkg
+  in
+    BM.phase (Pkg.toString name) $
+      File.readBinary cache `catchError` \_ -> do
+          desc <- withExceptT BM.PackageProblem (Desc.read (root </> Path.description))
+          packageGraph <- CrawlPackage.dfsFromExposedModules root solution desc
+          let projectGraph = canonicalizePackageGraph (name,version) packageGraph
+          liftIO (File.writeBinary cache projectGraph)
+          return projectGraph
 
 
 canonicalizePackageGraph

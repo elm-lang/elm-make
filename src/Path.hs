@@ -1,5 +1,4 @@
-{-# LANGUAGE FlexibleContexts #-}
-module Path where
+module Path (toInterface, toObjectFile, toPackageCacheFile, toSource) where
 
 import qualified Data.List as List
 import System.FilePath ((</>), (<.>))
@@ -20,6 +19,11 @@ toObjectFile root (TMP.CanonicalModule package (Module.Name names)) =
     root </> inPackage package (List.intercalate "-" names <.> "elmo")
 
 
+toPackageCacheFile :: FilePath -> TMP.Package -> FilePath
+toPackageCacheFile root pkg =
+    root </> inPackage pkg "graph.dat"
+
+
 toSource :: TMP.Location -> FilePath
 toSource (TMP.Location relativePath _package) =
     relativePath
@@ -27,9 +31,4 @@ toSource (TMP.Location relativePath _package) =
 
 inPackage :: TMP.Package -> FilePath -> FilePath
 inPackage (name, version) relativePath =
-    fromPackage name version </> relativePath
-
-
-fromPackage :: Pkg.Name -> V.Version -> FilePath
-fromPackage name version =
-    Pkg.toFilePath name </> V.toString version
+    Pkg.toFilePath name </> V.toString version </> relativePath
