@@ -7,7 +7,7 @@ import qualified Data.List as List
 import Data.Monoid ((<>), mconcat, mempty)
 import Data.Version (showVersion)
 import qualified Elm.Compiler as Compiler
-import qualified Elm.Compiler.Version as CompilerVersion
+import qualified Elm.Package as Pkg
 import qualified Options.Applicative as Opt
 import qualified Paths_elm_make as This
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
@@ -124,7 +124,7 @@ helpInfo =
   where
     top =
         "elm-make " ++ showVersion This.version
-        ++ " (Elm Platform " ++ CompilerVersion.version ++ ")\n"
+        ++ " (Elm Platform " ++ (Pkg.versionToString Compiler.version) ++ ")\n"
 
     examples =
         linesToDoc
