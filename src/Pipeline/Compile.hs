@@ -255,7 +255,7 @@ buildModule
     -> IO ()
 buildModule env interfaces (modul, location) =
   let
-    (Pkg.Name user project) = fst (TMP.package modul)
+    packageName = fst (TMP.package modul)
     path = Path.toSource location
     ifaces = Map.mapKeys TMP.name interfaces
     isRoot = Set.member modul (modulesForGeneration env)
@@ -264,7 +264,7 @@ buildModule env interfaces (modul, location) =
   do  source <- readFile path
 
       let context =
-            Compiler.Context user project isRoot isExposed
+            Compiler.Context packageName isRoot isExposed
 
       let (dealiaser, warnings, rawResult) =
             Compiler.compile context source ifaces
