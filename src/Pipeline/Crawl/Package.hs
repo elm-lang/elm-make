@@ -7,10 +7,9 @@ import qualified Data.Map as Map
 import qualified Elm.Compiler as Compiler
 import qualified Elm.Compiler.Module as Module
 import qualified Elm.Package.Description as Desc
-import qualified Elm.Package.Name as Pkg
+import qualified Elm.Package as Pkg
 import qualified Elm.Package.Paths as Path
 import qualified Elm.Package.Solution as Solution
-import qualified Elm.Package.Version as V
 import System.Directory (doesFileExist, getCurrentDirectory, setCurrentDirectory)
 import System.FilePath ((</>), (<.>))
 
@@ -24,7 +23,7 @@ import TheMasterPlan ( PackageGraph(..), PackageData(..) )
 
 data Env = Env
     { _sourceDirs :: [FilePath]
-    , _availableForeignModules :: Map.Map Module.Name [(Pkg.Name, V.Version)]
+    , _availableForeignModules :: Map.Map Module.Name [(Pkg.Name, Pkg.Version)]
     }
 
 
@@ -216,7 +215,7 @@ addParent maybeParent names =
 readAvailableForeignModules
     :: Desc.Description
     -> Solution.Solution
-    -> BM.Task (Map.Map Module.Name [(Pkg.Name, V.Version)])
+    -> BM.Task (Map.Map Module.Name [(Pkg.Name, Pkg.Version)])
 readAvailableForeignModules desc solution =
   do  visiblePackages <- allVisible desc solution
       rawLocations <- mapM exposedModules visiblePackages
@@ -226,7 +225,7 @@ readAvailableForeignModules desc solution =
 allVisible
     :: Desc.Description
     -> Solution.Solution
-    -> BM.Task [(Pkg.Name, V.Version)]
+    -> BM.Task [(Pkg.Name, Pkg.Version)]
 allVisible desc solution =
     mapM getVersion visible
   where
@@ -240,8 +239,8 @@ allVisible desc solution =
 
 
 exposedModules
-    :: (Pkg.Name, V.Version)
-    -> BM.Task (Map.Map Module.Name [(Pkg.Name, V.Version)])
+    :: (Pkg.Name, Pkg.Version)
+    -> BM.Task (Map.Map Module.Name [(Pkg.Name, Pkg.Version)])
 exposedModules packageID@(pkgName, version) =
     within (Path.package pkgName version) $ do
         description <- withExceptT BM.PackageProblem (Desc.read Path.description)

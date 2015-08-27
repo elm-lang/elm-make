@@ -8,7 +8,7 @@ import qualified Data.Set as Set
 import qualified Elm.Compiler.Module as Module
 import qualified Elm.Package.Description as Desc
 import qualified Elm.Package.Initialize as Initialize
-import qualified Elm.Package.Name as Pkg
+import qualified Elm.Package as Pkg
 import qualified Elm.Package.Paths as Path
 import qualified Elm.Package.Solution as Solution
 import System.Directory (doesFileExist)
