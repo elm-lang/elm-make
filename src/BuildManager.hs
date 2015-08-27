@@ -6,6 +6,7 @@ import Control.Monad.State (StateT, liftIO, runStateT)
 import qualified Control.Monad.State as State
 import qualified Data.Time.Clock.POSIX as Time
 import qualified Elm.Compiler as Compiler
+import qualified Elm.Compiler.Version as CompilerVersion
 import qualified Elm.Compiler.Module as Module
 import qualified Elm.Package as Pkg
 import qualified Elm.Package.Paths as Path
@@ -42,7 +43,7 @@ outputFilePath config =
 
 artifactDirectory :: FilePath
 artifactDirectory =
-    Path.stuffDirectory </> "build-artifacts" </> Compiler.version
+    Path.stuffDirectory </> "build-artifacts" </> CompilerVersion.version
 
 
 -- RUN A BUILD
