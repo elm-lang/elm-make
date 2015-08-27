@@ -7,7 +7,7 @@ import qualified Control.Monad.State as State
 import qualified Data.Time.Clock.POSIX as Time
 import qualified Elm.Compiler as Compiler
 import qualified Elm.Compiler.Module as Module
-import qualified Elm.Package.Name as Pkg
+import qualified Elm.Package as Pkg
 import qualified Elm.Package.Paths as Path
 import System.FilePath ((</>))
 

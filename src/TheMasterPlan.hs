@@ -10,8 +10,7 @@ import Control.Applicative ((<$>), (<*>))
 import Data.Binary
 import qualified Data.Map as Map
 import qualified Elm.Compiler.Module as Module
-import qualified Elm.Package.Name as Pkg
-import qualified Elm.Package.Version as V
+import qualified Elm.Package as Pkg
 
 
 -- UNIQUE IDENTIFIERS FOR MODULES
@@ -23,7 +22,7 @@ data CanonicalModule = CanonicalModule
     deriving (Eq, Ord)
 
 
-type Package = (Pkg.Name, V.Version)
+type Package = (Pkg.Name, Pkg.Version)
 
 
 core :: Pkg.Name

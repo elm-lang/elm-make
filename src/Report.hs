@@ -5,9 +5,8 @@ import Control.Monad (when)
 import qualified Data.Aeson as Json
 import qualified Data.ByteString.Lazy.Char8 as BS
 import qualified Elm.Compiler as Compiler
-import qualified Elm.Package.Name as Pkg
+import qualified Elm.Package as Pkg
 import qualified Elm.Package.Paths as Path
-import qualified Elm.Package.Version as V
 import Elm.Utils ((|>))
 import GHC.IO.Handle (hIsTerminalDevice)
 import System.Exit (exitFailure)
@@ -136,7 +135,7 @@ errorMessage rootPkg errorPkg path printMessage =
 
 dependencyError :: Package -> String
 dependencyError (pkgName, version) =
-    header "ERRORS" ("dependency " ++ Pkg.toString pkgName ++ " " ++ V.toString version)
+    header "ERRORS" ("dependency " ++ Pkg.toString pkgName ++ " " ++ Pkg.versionToString version)
     ++ "This error probably means that the '" ++ Pkg.toString pkgName ++ "' has some\n"
     ++ "package constraint that is too permissive. You should definitely inform the\n"
     ++ "maintainer to get this fixed and save other people from this pain.\n\n"

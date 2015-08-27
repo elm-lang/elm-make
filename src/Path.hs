@@ -4,8 +4,7 @@ import qualified Data.List as List
 import System.FilePath ((</>), (<.>))
 
 import Elm.Compiler.Module as Module
-import Elm.Package.Name as Pkg
-import Elm.Package.Version as V
+import Elm.Package as Pkg
 import qualified TheMasterPlan as TMP
 
 
@@ -31,4 +30,4 @@ toSource (TMP.Location relativePath _package) =
 
 inPackage :: TMP.Package -> FilePath -> FilePath
 inPackage (name, version) relativePath =
-    Pkg.toFilePath name </> V.toString version </> relativePath
+    Pkg.toFilePath name </> Pkg.versionToString version </> relativePath
