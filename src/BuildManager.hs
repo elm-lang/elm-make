@@ -62,6 +62,10 @@ run task =
         (Left err, _) ->
             return (Left err)
 
+        (Right _, _) ->
+            error "Something impossible happened when profiling elm-make."
+
+
 
 -- TIMELINE
 
