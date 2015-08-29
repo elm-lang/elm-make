@@ -1,6 +1,5 @@
 module Path (toInterface, toObjectFile, toPackageCacheFile, toSource) where
 
-import qualified Data.List as List
 import System.FilePath ((</>), (<.>))
 
 import Elm.Compiler.Module as Module
@@ -9,13 +8,13 @@ import qualified TheMasterPlan as TMP
 
 
 toInterface :: FilePath -> TMP.CanonicalModule -> FilePath
-toInterface root (TMP.CanonicalModule package (Module.Name names)) =
-    root </> inPackage package (List.intercalate "-" names <.> "elmi")
+toInterface root (TMP.CanonicalModule package name) =
+    root </> inPackage package (Module.hyphenate name <.> "elmi")
 
 
 toObjectFile :: FilePath -> TMP.CanonicalModule -> FilePath
-toObjectFile root (TMP.CanonicalModule package (Module.Name names)) =
-    root </> inPackage package (List.intercalate "-" names <.> "elmo")
+toObjectFile root (TMP.CanonicalModule package name) =
+    root </> inPackage package (Module.hyphenate name <.> "elmo")
 
 
 toPackageCacheFile :: FilePath -> TMP.Package -> FilePath

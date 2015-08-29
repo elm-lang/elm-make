@@ -18,7 +18,7 @@ import qualified Utils.File as File
 import qualified Utils.Queue as Queue
 import qualified TheMasterPlan as TMP
 import TheMasterPlan
-    ( CanonicalModule, Location, Package
+    ( CanonicalModule(..), Location, Package
     , BuildGraph(BuildGraph), BuildData(..)
     )
 
@@ -29,6 +29,7 @@ data Env = Env
     , resultChan :: Chan.Chan Result
     , reportChan :: Chan.Chan Report.Message
     , docsChan :: Chan.Chan [Docs.Documentation]
+    , dependencies :: Map.Map CanonicalModule [CanonicalModule]
     , reverseDependencies :: Map.Map CanonicalModule [CanonicalModule]
     , cachePath :: FilePath
     , exposedModules :: Set.Set CanonicalModule
@@ -69,6 +70,7 @@ initEnv numProcessors cachePath exposedModules modulesForGeneration dependencies
         , resultChan = resultChan
         , reportChan = reportChan
         , docsChan = docsChan
+        , dependencies = dependencies
         , reverseDependencies = reverseGraph dependencies
         , cachePath = cachePath
         , exposedModules = exposedModules
@@ -257,14 +259,17 @@ buildModule env interfaces (modul, location) =
   let
     packageName = fst (TMP.package modul)
     path = Path.toSource location
-    ifaces = Map.mapKeys TMP.name interfaces
+    ifaces = Map.mapKeys simplifyModuleName interfaces
     isRoot = Set.member modul (modulesForGeneration env)
     isExposed = Set.member modul (exposedModules env)
+
+    deps =
+        map simplifyModuleName ((Map.!) (dependencies env) modul)
+
+    context =
+        Compiler.Context packageName isRoot isExposed deps
   in
   do  source <- readFile path
-
-      let context =
-            Compiler.Context packageName isRoot isExposed
 
       let (dealiaser, warnings, rawResult) =
             Compiler.compile context source ifaces
@@ -274,6 +279,11 @@ buildModule env interfaces (modul, location) =
             Result source path modul threadId dealiaser warnings rawResult
 
       Chan.writeChan (resultChan env) result
+
+
+simplifyModuleName :: TMP.CanonicalModule -> Module.CanonicalName
+simplifyModuleName (TMP.CanonicalModule (pkg,_) name) =
+    Module.canonicalName pkg name
 
 
 data Result = Result
