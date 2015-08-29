@@ -125,10 +125,10 @@ normalLoop isTerminal warn messageChan rootPkg total successes failures =
 
 errorMessage :: Package -> Package -> FilePath -> IO () -> IO ()
 errorMessage rootPkg errorPkg path printMessage =
-  if False -- TODO -- errorPkg /= rootPkg
-    then
+  if errorPkg /= rootPkg then
       hPutStr stderr (dependencyError errorPkg)
-    else
+
+  else
       do  hPutStr stderr (header "ERRORS" path)
           printMessage
 
