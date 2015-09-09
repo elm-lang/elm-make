@@ -2,7 +2,7 @@
 module Flags where
 
 import Control.Applicative ((<$>), (<*>), many, optional)
-import Control.Monad.Except (liftIO, throwError)
+import Control.Monad.Except (liftIO)
 import qualified Data.List as List
 import Data.Monoid ((<>), mconcat, mempty)
 import Data.Version (showVersion)
@@ -10,54 +10,23 @@ import qualified Elm.Compiler as Compiler
 import qualified Elm.Package as Pkg
 import qualified Options.Applicative as Opt
 import qualified Paths_elm_make as This
+import System.FilePath (takeExtension)
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 import qualified BuildManager as BM
 import qualified Report
 
 
-data Flags = Flags
-    { _files :: [FilePath]
-    , _html :: Maybe FilePath
-    , _js :: Maybe FilePath
-    , _autoYes :: Bool
-    , _reportType :: Report.Type
-    , _warn :: Bool
-    , _docs :: Maybe FilePath
-    }
-
-
 -- TO CONFIG
 
 toConfig :: BM.Task BM.Config
 toConfig =
-  do  (Flags files html js autoYes reportType warn docs) <- liftIO parse
-      output <- toOutput files html js
-      return (BM.Config BM.artifactDirectory files output autoYes reportType warn docs)
-
-
-toOutput :: [FilePath] -> Maybe FilePath -> Maybe FilePath -> BM.Task BM.Output
-toOutput sourceFiles html js =
-  case (sourceFiles, html, js) of
-    ( [], _, _ ) ->
-        throwError BM.BadFlags
-
-    ( _, Just _, Just _ ) ->
-        throwError BM.BadFlags
-
-    ( [_], _, Nothing ) ->
-        return (BM.Html (maybe "index.html" id html))
-
-    ( _, _, Just outputPath ) ->
-        return (BM.JS outputPath)
-
-    ( _ : _ : _, _, Nothing ) ->
-        throwError BM.BadFlags
+  liftIO parse
 
 
 -- PARSE ARGUMENTS
 
-parse :: IO Flags
+parse :: IO BM.Config
 parse =
     Opt.customExecParser preferences parser
   where
@@ -65,19 +34,18 @@ parse =
     preferences =
         Opt.prefs (mempty <> Opt.showHelpOnError)
 
-    parser :: Opt.ParserInfo Flags
+    parser :: Opt.ParserInfo BM.Config
     parser =
         Opt.info (Opt.helper <*> flags) helpInfo
 
 
 -- COMMANDS
 
-flags :: Opt.Parser Flags
+flags :: Opt.Parser BM.Config
 flags =
-    Flags
+    BM.Config BM.artifactDirectory
       <$> files
-      <*> optional html
-      <*> optional js
+      <*> output
       <*> yes
       <*> reportFlag
       <*> warnFlag
@@ -85,22 +53,6 @@ flags =
   where
     files =
       many (Opt.strArgument ( Opt.metavar "FILES..." ))
-
-    html =
-      Opt.strOption $
-        mconcat
-        [ Opt.long "html"
-        , Opt.metavar "FILE"
-        , Opt.help "Write resulting HTML to the given FILE."
-        ]
-
-    js =
-      Opt.strOption $
-        mconcat
-        [ Opt.long "js"
-        , Opt.metavar "FILE"
-        , Opt.help "Write resulting JS to the given FILE."
-        ]
 
     docs =
       Opt.strOption $
@@ -113,7 +65,7 @@ flags =
 
 -- HELP
 
-helpInfo :: Opt.InfoMod Flags
+helpInfo :: Opt.InfoMod BM.Config
 helpInfo =
     mconcat
         [ Opt.fullDesc
@@ -129,9 +81,10 @@ helpInfo =
     examples =
         linesToDoc
         [ "Examples:"
-        , "  elm-make Main.elm                   # make HTML in index.html"
-        , "  elm-make Main.elm --html main.html  # make HTML in main.html"
-        , "  elm-make Main.elm --js elm.js       # make JS in elm.js"
+        , "  elm-make Main.elm                     # compiled to HTML in index.html"
+        , "  elm-make Main.elm --output main.html  # compiled to HTML in main.html"
+        , "  elm-make Main.elm --output elm.js     # compiled to JS in elm.js"
+        , "  elm-make Main.elm --warn              # compile and report warnings"
         , ""
         , "Full guide to using elm-make at <https://github.com/elm-lang/elm-make>"
         ]
@@ -158,6 +111,37 @@ warnFlag =
         [ Opt.long "warn"
         , Opt.help "Report warnings to improve code quality."
         ]
+
+
+output :: Opt.Parser BM.Output
+output =
+  let
+    fromString path =
+      let
+        ext =
+          takeExtension path
+      in
+        if ext == ".html" then
+          Just (BM.Html path)
+
+        else if ext == ".js" then
+          Just (BM.JS path)
+
+        else
+          Nothing
+
+    rawFlag =
+      mconcat
+        [ Opt.long "output"
+        , Opt.metavar "FILE"
+        , Opt.value (BM.Html "index.html")
+        , Opt.help "Write result to the given .html or .js FILE."
+        ]
+
+    validInput =
+      ["any file that ends with .html or .js"]
+  in
+    Opt.option (argReader validInput fromString) rawFlag
 
 
 reportFlag :: Opt.Parser Report.Type
