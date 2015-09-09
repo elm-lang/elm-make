@@ -9,7 +9,6 @@ import qualified Data.Set as Set
 import qualified Elm.Compiler as Compiler
 import qualified Elm.Compiler.Module as Module
 import qualified Elm.Docs as Docs
-import qualified Elm.Package as Pkg
 
 import qualified BuildManager as BM
 import qualified Path
