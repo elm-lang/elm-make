@@ -210,7 +210,8 @@ clearProgressBar =
 
 closeMessage :: Int -> Int -> String
 closeMessage failures total =
-  case failures of
-    0 -> "Success! Compiled " ++ show total ++ " modules."
-    1 -> "Detected errors in 1 module."
-    n -> "Detected errors in " ++ show n ++ " modules."
+  case (failures, total) of
+    (0, 1) -> "Success! Compiled 1 module."
+    (0, _) -> "Success! Compiled " ++ show total ++ " modules."
+    (1, _) -> "Detected errors in 1 module."
+    (n, _) -> "Detected errors in " ++ show n ++ " modules."
