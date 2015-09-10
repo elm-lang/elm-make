@@ -81,9 +81,9 @@ helpInfo =
     examples =
         linesToDoc
         [ "Examples:"
-        , "  elm-make Main.elm                     # compiled to HTML in index.html"
-        , "  elm-make Main.elm --output main.html  # compiled to HTML in main.html"
-        , "  elm-make Main.elm --output elm.js     # compiled to JS in elm.js"
+        , "  elm-make Main.elm                     # compile to HTML in index.html"
+        , "  elm-make Main.elm --output main.html  # compile to HTML in main.html"
+        , "  elm-make Main.elm --output elm.js     # compile to JS in elm.js"
         , "  elm-make Main.elm --warn              # compile and report warnings"
         , ""
         , "Full guide to using elm-make at <https://github.com/elm-lang/elm-make>"
