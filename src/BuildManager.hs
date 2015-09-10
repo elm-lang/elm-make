@@ -4,6 +4,7 @@ module BuildManager where
 import Control.Monad.Except (ExceptT, runExceptT)
 import Control.Monad.State (StateT, liftIO, runStateT)
 import qualified Control.Monad.State as State
+import qualified Data.List as List
 import qualified Data.Time.Clock.POSIX as Time
 import qualified Elm.Compiler as Compiler
 import qualified Elm.Compiler.Module as Module
@@ -156,7 +157,7 @@ errorToString err =
 
     Cycle moduleCycle ->
         "Your dependencies form a cycle:\n\n"
-        ++ error "TODO" moduleCycle
+        ++ drawCycle moduleCycle
         ++ "\nYou may need to move some values to a new module to get rid of the cycle."
 
     PackageProblem msg ->
@@ -204,4 +205,22 @@ toContext maybeParent =
 
     Just parent ->
         " imported by module '" ++ Module.nameToString parent ++ "'"
+
+
+drawCycle :: [TMP.CanonicalModule] -> String
+drawCycle modules =
+  let
+    topLine=
+        "  ┌─────┐"
+
+    line (TMP.CanonicalModule _ name) =
+        "  │    " ++ Module.nameToString name
+
+    midLine =
+        "  │     ↓"
+
+    bottomLine =
+        "  └─────┘"
+  in
+    unlines (topLine : List.intersperse midLine (map line modules) ++ [ bottomLine ])
 
