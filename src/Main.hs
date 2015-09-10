@@ -1,143 +1,71 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# OPTIONS_GHC -Wall #-}
 module Main where
 
-import Control.Monad (forM)
-import Control.Monad.Except (MonadError, runExceptT, MonadIO, liftIO)
-import Control.Monad.Reader (MonadReader, runReaderT, ask)
-import qualified Data.List as List
+import Control.Monad.Except (liftIO)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import System.Directory (doesFileExist)
-import System.FilePath ((</>))
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
 import GHC.Conc (getNumProcessors, setNumCapabilities)
 
-import qualified Build
-import qualified CrawlPackage
-import qualified CrawlProject
-import qualified LoadInterfaces
-import qualified Arguments
-import qualified Elm.Package.Description as Desc
-import qualified Elm.Package.Initialize as Initialize
-import qualified Elm.Package.Paths as Path
-import qualified Elm.Package.Solution as Solution
-import qualified Generate
-import TheMasterPlan
-    ( ModuleID(ModuleID), Location, PackageID
-    , ProjectSummary(..), ProjectData(..)
-    )
+import qualified BuildManager as BM
+import qualified Flags
+import qualified Pipeline.Compile as Compile
+import qualified Pipeline.Crawl as Crawl
+import qualified Pipeline.Plan as Plan
+import qualified Pipeline.Generate as Generate
+import TheMasterPlan (ProjectGraph(..), ProjectData(..))
 
 
 main :: IO ()
 main =
-  do  args <- Arguments.parse
+  do  numProcessors <- getNumProcessors
+      setNumCapabilities numProcessors
 
-      result <- runExceptT (runReaderT (run args) artifactDirectory)
+      result <- BM.run (make numProcessors)
       case result of
-        Right () ->
-          return ()
+        Right (_, timeline) ->
+          putStrLn (BM.timelineToString timeline)
 
-        Left msg ->
-          do  hPutStrLn stderr msg
+        Left err ->
+          do  hPutStrLn stderr (BM.errorToString err)
               exitFailure
 
 
-artifactDirectory :: FilePath
-artifactDirectory =
-    Path.stuffDirectory </> "build-artifacts"
+make :: Int -> BM.Task ()
+make numProcessors =
+  do  config <- Flags.toConfig
 
-
-run :: (MonadIO m, MonadError String m, MonadReader FilePath m)
-    => Arguments.Arguments
-    -> m ()
-run args =
-  do  numProcessors <- liftIO getNumProcessors
-      liftIO (setNumCapabilities numProcessors)
-
-      (thisPackage, exposedModules, moduleForGeneration, projectSummary) <-
-          crawl (Arguments.autoYes args) (Arguments.files args)
+      (Crawl.ProjectInfo thisPackage exposedModules moduleForGeneration projectSummary) <-
+          BM.phase "Crawl Project" (Crawl.crawl config)
 
       let dependencies =
             Map.map projectDependencies (projectData projectSummary)
 
       let modulesToDocument =
-            maybe Set.empty (const exposedModules) (Arguments.docs args)
+            maybe Set.empty (const exposedModules) (BM._docs config)
 
       buildSummary <-
-          LoadInterfaces.prepForBuild modulesToDocument projectSummary
+          BM.phase "Plan Build" (Plan.planBuild config modulesToDocument projectSummary)
 
-      cachePath <- ask
       docs <-
-        liftIO $
-          Build.build
-            (Arguments.reportType args)
-            (Arguments.warn args)
+        BM.phase "Compile" $ liftIO $
+          Compile.build
+            config
             numProcessors
             thisPackage
-            cachePath
             exposedModules
             moduleForGeneration
             dependencies
             buildSummary
 
-      maybe (return ()) (Generate.docs docs) (Arguments.docs args)
+      BM.phase "Generate Docs" $
+        maybe (return ()) (Generate.docs docs) (BM._docs config)
 
-      Generate.generate
-          cachePath
+      BM.phase "Generate Code" $
+        Generate.generate
+          config
           dependencies
           (projectNatives projectSummary)
           moduleForGeneration
-          (maybe "elm.js" id (Arguments.outputFile args))
-
-
-crawl
-    :: (MonadIO m, MonadError String m)
-    => Bool
-    -> [FilePath]
-    -> m (PackageID, Set.Set ModuleID, [ModuleID], ProjectSummary Location)
-crawl autoYes filePaths =
-  do  solution <- getSolution autoYes
-
-      summaries <-
-          forM (Map.toList solution) $ \(name,version) -> do
-              let root = Path.package name version
-              desc <- Desc.read (root </> Path.description)
-              packageSummary <- CrawlPackage.dfsFromExposedModules root solution desc
-              return (CrawlProject.canonicalizePackageSummary (name,version) packageSummary)
-
-
-      desc <- Desc.read Path.description
-
-      (moduleForGeneration, packageSummary) <-
-          case filePaths of
-            [] ->
-              do  summary <- CrawlPackage.dfsFromExposedModules "." solution desc
-                  return ([], summary)
-
-            _ -> CrawlPackage.dfsFromFiles "." solution desc filePaths
-
-      let thisPackage =
-            (Desc.name desc, Desc.version desc)
-
-      let summary =
-            CrawlProject.canonicalizePackageSummary thisPackage packageSummary
-
-      let localize moduleName =
-            ModuleID moduleName thisPackage
-
-      return
-          ( thisPackage
-          , Set.fromList (map localize (Desc.exposed desc))
-          , map localize moduleForGeneration
-          , List.foldl1 CrawlProject.union (summary : summaries)
-          )
-
-
-getSolution :: (MonadIO m, MonadError String m) => Bool -> m Solution.Solution
-getSolution autoYes =
-  do  exists <- liftIO (doesFileExist Path.solvedDependencies)
-      if exists
-          then Solution.read Path.solvedDependencies
-          else Initialize.solution autoYes
 

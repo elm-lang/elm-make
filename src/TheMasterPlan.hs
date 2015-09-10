@@ -6,21 +6,24 @@ data we have so far" formatted in a way that will be nice for the next stage.
 The idea is that our implementation should be guiding us between these models.
 -}
 
+import Control.Applicative ((<$>), (<*>))
+import Data.Binary
 import qualified Data.Map as Map
 import qualified Elm.Compiler.Module as Module
-import qualified Elm.Package.Name as Pkg
-import qualified Elm.Package.Version as V
+import qualified Elm.Package as Pkg
 
 
 -- UNIQUE IDENTIFIERS FOR MODULES
 
-data ModuleID = ModuleID
-    { moduleName :: Module.Name
-    , packageID :: PackageID
+data CanonicalModule = CanonicalModule
+    { package :: Package
+    , name :: Module.Name
     }
     deriving (Eq, Ord)
 
-type PackageID = (Pkg.Name, V.Version)
+
+type Package = (Pkg.Name, Pkg.Version)
+
 
 core :: Pkg.Name
 core =
@@ -39,11 +42,12 @@ file or package description.
       any foreign modules that are needed locally and which package owns them
 
 -}
-data PackageSummary = PackageSummary
+data PackageGraph = PackageGraph
     { packageData :: Map.Map Module.Name PackageData
     , packageNatives :: Map.Map Module.Name FilePath
-    , packageForeignDependencies :: Map.Map Module.Name PackageID
+    , packageForeignDependencies :: Map.Map Module.Name Package
     }
+
 
 data PackageData = PackageData
     { packagePath :: FilePath
@@ -53,38 +57,40 @@ data PackageData = PackageData
 
 -- COMBINE ALL PACKAGE SUMMARIES
 
-{-| Very similar to a PackageSummary, but we now have made each module name
+{-| Very similar to a PackageGraph, but we now have made each module name
 unique by adding which package it comes from. This makes it safe to merge a
-bunch of PackageSummaries together, so we can write the rest of our code
+bunch of PackageGraphs together, so we can write the rest of our code
 without thinking about package boundaries.
 -}
-data ProjectSummary a = ProjectSummary
-    { projectData :: Map.Map ModuleID (ProjectData a)
-    , projectNatives :: Map.Map ModuleID Location
+data ProjectGraph a = ProjectGraph
+    { projectData :: Map.Map CanonicalModule (ProjectData a)
+    , projectNatives :: Map.Map CanonicalModule Location
     }
+
 
 data ProjectData a = ProjectData
     { projectLocation :: a
-    , projectDependencies :: [ModuleID]
+    , projectDependencies :: [CanonicalModule]
     }
 
+
 data Location = Location
-    { relativePath :: FilePath
-    , package :: PackageID
+    { _relativePath :: FilePath
+    , _package :: Package
     }
 
 
 -- BUILD-FRIENDLY SUMMARY
 
-{-| Combines the ProjectSummary with all cached build information. At this
+{-| Combines the ProjectGraph with all cached build information. At this
 stage we crawl any cached interface files. File changes may have invalidated
 these cached interfaces, so we filter out any stale interfaces.
 
 The resulting format is very convenient for managing parallel builds.
 -}
-data BuildSummary = BuildSummary
-    { blockedModules :: Map.Map ModuleID BuildData
-    , completedInterfaces :: Map.Map ModuleID Module.Interface
+data BuildGraph = BuildGraph
+    { blockedModules :: Map.Map CanonicalModule BuildData
+    , completedInterfaces :: Map.Map CanonicalModule Module.Interface
     }
 
 
@@ -98,7 +104,43 @@ produced. When 'blocking' is empty, it is safe to add this module to the build
 queue.
 -}
 data BuildData = BuildData
-    { blocking :: [ModuleID]
+    { blocking :: [CanonicalModule]
     , location :: Location
     }
 
+
+-- BINARY
+
+instance Binary CanonicalModule where
+  get =
+    CanonicalModule <$> get <*> get
+
+  put (CanonicalModule pkg nm) =
+    do  put pkg
+        put nm
+
+
+instance (Binary a) => Binary (ProjectGraph a) where
+  get =
+    ProjectGraph <$> get <*> get
+
+  put (ProjectGraph elms jss) =
+    do  put elms
+        put jss
+
+
+instance (Binary a) => Binary (ProjectData a) where
+  get =
+    ProjectData <$> get <*> get
+
+  put (ProjectData locations dependencies) =
+    put locations >> put dependencies
+
+
+instance Binary Location where
+  get =
+    Location <$> get <*> get
+
+  put (Location relative pkg) =
+    do  put relative
+        put pkg

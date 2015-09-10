@@ -1,30 +1,32 @@
-module Arguments where
+{-# OPTIONS_GHC -Wall #-}
+module Flags where
 
 import Control.Applicative ((<$>), (<*>), many, optional)
+import Control.Monad.Except (liftIO)
 import qualified Data.List as List
 import Data.Monoid ((<>), mconcat, mempty)
 import Data.Version (showVersion)
+import qualified Elm.Compiler as Compiler
+import qualified Elm.Package as Pkg
 import qualified Options.Applicative as Opt
 import qualified Paths_elm_make as This
+import System.FilePath (takeExtension)
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
-import qualified Elm.Compiler as Compiler
+import qualified BuildManager as BM
 import qualified Report
 
 
-data Arguments = Arguments
-    { files :: [FilePath]
-    , outputFile :: Maybe FilePath
-    , autoYes :: Bool
-    , reportType :: Report.Type
-    , warn :: Bool
-    , docs :: Maybe FilePath
-    }
+-- TO CONFIG
+
+toConfig :: BM.Task BM.Config
+toConfig =
+  liftIO parse
 
 
 -- PARSE ARGUMENTS
 
-parse :: IO Arguments
+parse :: IO BM.Config
 parse =
     Opt.customExecParser preferences parser
   where
@@ -32,18 +34,18 @@ parse =
     preferences =
         Opt.prefs (mempty <> Opt.showHelpOnError)
 
-    parser :: Opt.ParserInfo Arguments
+    parser :: Opt.ParserInfo BM.Config
     parser =
-        Opt.info (Opt.helper <*> options) helpInfo
+        Opt.info (Opt.helper <*> flags) helpInfo
 
 
 -- COMMANDS
 
-options :: Opt.Parser Arguments
-options =
-    Arguments
+flags :: Opt.Parser BM.Config
+flags =
+    BM.Config BM.artifactDirectory
       <$> files
-      <*> optional outputFile
+      <*> output
       <*> yes
       <*> reportFlag
       <*> warnFlag
@@ -51,14 +53,6 @@ options =
   where
     files =
       many (Opt.strArgument ( Opt.metavar "FILES..." ))
-
-    outputFile =
-      Opt.strOption $
-        mconcat
-        [ Opt.long "output"
-        , Opt.metavar "FILE"
-        , Opt.help "Write output to FILE."
-        ]
 
     docs =
       Opt.strOption $
@@ -71,29 +65,34 @@ options =
 
 -- HELP
 
-helpInfo :: Opt.InfoMod Arguments
+helpInfo :: Opt.InfoMod BM.Config
 helpInfo =
     mconcat
         [ Opt.fullDesc
         , Opt.header top
         , Opt.progDesc "build Elm projects"
-        , Opt.footerDoc (Just moreHelp)
+        , Opt.footerDoc (Just examples)
         ]
   where
     top =
         "elm-make " ++ showVersion This.version
-        ++ " (Elm Platform " ++ Compiler.version ++ ")\n"
+        ++ " (Elm Platform " ++ (Pkg.versionToString Compiler.version) ++ ")\n"
 
-    moreHelp =
+    examples =
         linesToDoc
-        [ "To learn more about a particular command run:"
-        , "    elm-make COMMAND --help"
+        [ "Examples:"
+        , "  elm-make Main.elm                     # compile to HTML in index.html"
+        , "  elm-make Main.elm --output main.html  # compile to HTML in main.html"
+        , "  elm-make Main.elm --output elm.js     # compile to JS in elm.js"
+        , "  elm-make Main.elm --warn              # compile and report warnings"
+        , ""
+        , "Full guide to using elm-make at <https://github.com/elm-lang/elm-make>"
         ]
 
 
 linesToDoc :: [String] -> PP.Doc
-linesToDoc lines =
-    PP.vcat (map PP.text lines)
+linesToDoc lineList =
+    PP.vcat (map PP.text lineList)
 
 
 yes :: Opt.Parser Bool
@@ -112,6 +111,37 @@ warnFlag =
         [ Opt.long "warn"
         , Opt.help "Report warnings to improve code quality."
         ]
+
+
+output :: Opt.Parser BM.Output
+output =
+  let
+    fromString path =
+      let
+        ext =
+          takeExtension path
+      in
+        if ext == ".html" then
+          Just (BM.Html path)
+
+        else if ext == ".js" then
+          Just (BM.JS path)
+
+        else
+          Nothing
+
+    rawFlag =
+      mconcat
+        [ Opt.long "output"
+        , Opt.metavar "FILE"
+        , Opt.value (BM.Html "index.html")
+        , Opt.help "Write result to the given .html or .js FILE."
+        ]
+
+    validInput =
+      ["any file that ends with .html or .js"]
+  in
+    Opt.option (argReader validInput fromString) rawFlag
 
 
 reportFlag :: Opt.Parser Report.Type

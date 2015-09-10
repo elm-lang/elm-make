@@ -1,45 +1,40 @@
-{-# LANGUAGE FlexibleContexts #-}
-module LoadInterfaces where
+module Pipeline.Plan where
 
-import Control.Monad.Except (MonadError, MonadIO, liftIO, throwError)
-import Control.Monad.Reader (MonadReader, ask)
+import Control.Monad.Except (liftIO, throwError)
 import qualified Data.Graph as Graph
 import qualified Data.List as List
 import qualified Data.Set as Set
 import Data.Map ((!))
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
+import qualified Elm.Compiler.Module as Module
 import System.Directory (doesFileExist, getModificationTime)
 
-import qualified Elm.Compiler.Module as Module
+import qualified BuildManager as BM
 import qualified Path
 import qualified Utils.File as File
 import TheMasterPlan
-    ( ModuleID(ModuleID), Location(..)
-    , ProjectSummary(ProjectSummary), ProjectData(..)
-    , BuildSummary(..), BuildData(..)
+    ( CanonicalModule(CanonicalModule), Location(..)
+    , ProjectGraph(ProjectGraph), ProjectData(..)
+    , BuildGraph(..), BuildData(..)
     )
 
 
-prepForBuild
-    :: (MonadIO m, MonadError String m, MonadReader FilePath m)
-    => Set.Set ModuleID
-    -> ProjectSummary Location
-    -> m BuildSummary
-prepForBuild modulesToDocument (ProjectSummary projectData _projectNatives) =
-  do  enhancedData <- addInterfaces projectData
+planBuild :: BM.Config -> Set.Set CanonicalModule -> ProjectGraph Location -> BM.Task BuildGraph
+planBuild config modulesToDocument (ProjectGraph projectData _projectNatives) =
+  do  enhancedData <- addInterfaces (BM._artifactDirectory config) projectData
       filteredData <- filterStaleInterfaces modulesToDocument enhancedData
-      return (toBuildSummary filteredData)
+      return (toBuildGraph filteredData)
 
 
 --- LOAD INTERFACES -- what has already been compiled?
 
 addInterfaces
-    :: (MonadIO m, MonadReader FilePath m, MonadError String m)
-    => Map.Map ModuleID (ProjectData Location)
-    -> m (Map.Map ModuleID (ProjectData (Location, Maybe Module.Interface)))
-addInterfaces projectData =
-  do  enhancedData <- mapM maybeLoadInterface (Map.toList projectData)
+    :: FilePath
+    -> Map.Map CanonicalModule (ProjectData Location)
+    -> BM.Task (Map.Map CanonicalModule (ProjectData (Location, Maybe Module.Interface)))
+addInterfaces artifactRoot projectData =
+  do  enhancedData <- mapM (maybeLoadInterface artifactRoot) (Map.toList projectData)
       return (Map.fromList enhancedData)
 
 
@@ -49,12 +44,11 @@ addInterfaces projectData =
 -- Main. The real fix may be to add a hash of the source code to the interface
 -- files.
 maybeLoadInterface
-    :: (MonadIO m, MonadReader FilePath m, MonadError String m)
-    => (ModuleID, ProjectData Location)
-    -> m (ModuleID, ProjectData (Location, Maybe Module.Interface))
-maybeLoadInterface (moduleID, (ProjectData location deps)) =
-  do  cacheRoot <- ask
-      let interfacePath = Path.toInterface cacheRoot moduleID
+    :: FilePath
+    -> (CanonicalModule, ProjectData Location)
+    -> BM.Task (CanonicalModule, ProjectData (Location, Maybe Module.Interface))
+maybeLoadInterface artifactRoot (moduleID, (ProjectData location deps)) =
+  do  let interfacePath = Path.toInterface artifactRoot moduleID
       let sourcePath = Path.toSource location
       fresh <- liftIO (isFresh sourcePath interfacePath)
 
@@ -79,8 +73,8 @@ isFresh sourcePath interfacePath =
               return (sourceTime <= interfaceTime)
 
 
-isMain :: ModuleID -> Bool
-isMain (ModuleID (Module.Name names) _) =
+isMain :: CanonicalModule -> Bool
+isMain (CanonicalModule _ (Module.Name names)) =
     case names of
       ["Main"] -> True
       _ -> False
@@ -89,29 +83,28 @@ isMain (ModuleID (Module.Name names) _) =
 -- FILTER STALE INTERFACES -- have files become stale due to other changes?
 
 filterStaleInterfaces
-    :: (MonadError String m)
-    => Set.Set ModuleID
-    -> Map.Map ModuleID (ProjectData (Location, Maybe Module.Interface))
-    -> m (Map.Map ModuleID (ProjectData (Either Location Module.Interface)))
+    :: Set.Set CanonicalModule
+    -> Map.Map CanonicalModule (ProjectData (Location, Maybe Module.Interface))
+    -> BM.Task (Map.Map CanonicalModule (ProjectData (Either Location Module.Interface)))
 filterStaleInterfaces modulesToDocument summary =
   do  sortedNames <- topologicalSort (Map.map projectDependencies summary)
       return (List.foldl' (filterIfStale summary modulesToDocument) Map.empty sortedNames)
 
 
 filterIfStale
-    :: Map.Map ModuleID (ProjectData (Location, Maybe Module.Interface))
-    -> Set.Set ModuleID
-    -> Map.Map ModuleID (ProjectData (Either Location Module.Interface))
-    -> ModuleID
-    -> Map.Map ModuleID (ProjectData (Either Location Module.Interface))
-filterIfStale enhancedSummary modulesToDocument filteredSummary moduleName =
-    Map.insert moduleName (ProjectData trueLocation deps) filteredSummary
+    :: Map.Map CanonicalModule (ProjectData (Location, Maybe Module.Interface))
+    -> Set.Set CanonicalModule
+    -> Map.Map CanonicalModule (ProjectData (Either Location Module.Interface))
+    -> CanonicalModule
+    -> Map.Map CanonicalModule (ProjectData (Either Location Module.Interface))
+filterIfStale enhancedGraph modulesToDocument filteredGraph moduleName =
+    Map.insert moduleName (ProjectData trueLocation deps) filteredGraph
   where
     (ProjectData (filePath, maybeInterface) deps) =
-        enhancedSummary ! moduleName
+        enhancedGraph ! moduleName
 
     depsAreDone =
-      all (haveInterface filteredSummary) deps
+      all (haveInterface filteredGraph) deps
 
     needsDocs =
       Set.member moduleName modulesToDocument
@@ -126,25 +119,25 @@ filterIfStale enhancedSummary modulesToDocument filteredSummary moduleName =
 
 
 haveInterface
-    :: Map.Map ModuleID (ProjectData (Either Location Module.Interface))
-    -> ModuleID
+    :: Map.Map CanonicalModule (ProjectData (Either Location Module.Interface))
+    -> CanonicalModule
     -> Bool
-haveInterface enhancedSummary rawName =
+haveInterface enhancedGraph rawName =
     case filterNativeDeps rawName of
       Nothing -> True
       Just name ->
-          case Map.lookup name enhancedSummary of
+          case Map.lookup name enhancedGraph of
             Just (ProjectData (Right _) _) -> True
             _ -> False
 
 
 -- FILTER DEPENDENCIES -- which modules actually need to be compiled?
 
-toBuildSummary
-    :: Map.Map ModuleID (ProjectData (Either Location Module.Interface))
-    -> BuildSummary
-toBuildSummary summary =
-    BuildSummary
+toBuildGraph
+    :: Map.Map CanonicalModule (ProjectData (Either Location Module.Interface))
+    -> BuildGraph
+toBuildGraph summary =
+    BuildGraph
     { blockedModules = Map.map (toBuildData interfaces) locations
     , completedInterfaces = interfaces
     }
@@ -161,7 +154,7 @@ toBuildSummary summary =
               Right interface
 
 toBuildData
-    :: Map.Map ModuleID Module.Interface
+    :: Map.Map CanonicalModule Module.Interface
     -> ProjectData Location
     -> BuildData
 toBuildData interfaces (ProjectData location dependencies) =
@@ -170,25 +163,25 @@ toBuildData interfaces (ProjectData location dependencies) =
     blocking =
         Maybe.mapMaybe filterDeps dependencies
 
-    filterDeps :: ModuleID -> Maybe ModuleID
+    filterDeps :: CanonicalModule -> Maybe CanonicalModule
     filterDeps deps =
         filterCachedDeps interfaces =<< filterNativeDeps deps
 
 
 filterCachedDeps
-    :: Map.Map ModuleID Module.Interface
-    -> ModuleID
-    -> Maybe ModuleID
+    :: Map.Map CanonicalModule Module.Interface
+    -> CanonicalModule
+    -> Maybe CanonicalModule
 filterCachedDeps interfaces name =
     case Map.lookup name interfaces of
       Just _interface -> Nothing
       Nothing -> Just name
 
 
-filterNativeDeps :: ModuleID -> Maybe ModuleID
+filterNativeDeps :: CanonicalModule -> Maybe CanonicalModule
 filterNativeDeps name =
     case name of
-      ModuleID (Module.Name ("Native" : _)) _pkg ->
+      CanonicalModule _pkg (Module.Name ("Native" : _)) ->
           Nothing
 
       _ ->
@@ -197,7 +190,7 @@ filterNativeDeps name =
 
 -- SORT GRAPHS / CHECK FOR CYCLES
 
-topologicalSort :: (MonadError String m) => Map.Map ModuleID [ModuleID] -> m [ModuleID]
+topologicalSort :: Map.Map CanonicalModule [CanonicalModule] -> BM.Task [CanonicalModule]
 topologicalSort dependencies =
     mapM errorOnCycle components
   where
@@ -209,25 +202,8 @@ topologicalSort dependencies =
 
     errorOnCycle scc =
         case scc of
-          Graph.AcyclicSCC name -> return name
-          Graph.CyclicSCC cycle@(first:_) ->
-              throwError $
-              "Your dependencies form a cycle:\n\n"
-              ++ showCycle first cycle
-              ++ "\nYou may need to move some values to a new module to get rid of the cycle."
+          Graph.AcyclicSCC name ->
+              return name
 
-
-showCycle :: ModuleID -> [ModuleID] -> String
-showCycle first cycle =
-  case cycle of
-    [] -> ""
-
-    [last] ->
-        "    " ++ idToString last ++ " => " ++ idToString first ++ "\n"
-
-    one:two:rest ->
-        "    " ++ idToString one ++ " => " ++ idToString two ++ "\n"
-        ++ showCycle first (two:rest)
-  where
-    idToString (ModuleID moduleName _pkg) =
-        Module.nameToString moduleName
+          Graph.CyclicSCC cycle ->
+              throwError (BM.Cycle cycle)
