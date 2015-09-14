@@ -108,12 +108,16 @@ getReachableObjectFiles
 getReachableObjectFiles moduleNames nodes =
     let (dependencyGraph, vertexToKey, keyToVertex) =
             Graph.graphFromEdges nodes
+
+        reachableSet =
+            Maybe.mapMaybe keyToVertex moduleNames
+              |> Graph.dfs dependencyGraph
+              |> concatMap Tree.flatten
+              |> Set.fromList
     in
-        Maybe.mapMaybe keyToVertex moduleNames
-          |> Graph.dfs dependencyGraph
-          |> concatMap Tree.flatten
-          |> Set.fromList
-          |> Set.toList
+        Graph.topSort dependencyGraph
+          |> filter (\vtx -> Set.member vtx reachableSet)
+          |> reverse
           |> map vertexToKey
           |> map (\(path, _, _) -> path)
 
