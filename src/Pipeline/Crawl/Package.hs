@@ -229,11 +229,15 @@ allVisible
 allVisible desc solution =
     mapM getVersion visible
   where
-    visible = map fst (Desc.dependencies desc)
+    visible =
+        map fst (Desc.dependencies desc)
+
+    getVersion :: Pkg.Name -> BM.Task (Pkg.Name, Pkg.Version)
     getVersion name =
         case Map.lookup name solution of
           Just version ->
               return (name, version)
+
           Nothing ->
               throwError (BM.MissingPackage name)
 

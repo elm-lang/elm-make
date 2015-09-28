@@ -200,6 +200,7 @@ topologicalSort dependencies =
     toNode (name, deps) =
         (name, name, deps)
 
+    errorOnCycle :: Graph.SCC CanonicalModule -> BM.Task CanonicalModule
     errorOnCycle scc =
         case scc of
           Graph.AcyclicSCC name ->
