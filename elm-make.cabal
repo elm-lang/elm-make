@@ -55,6 +55,7 @@ Executable elm-make
 
     Build-depends:
         aeson,
+        ansi-terminal,
         ansi-wl-pprint,
         base >=4.2 && <5,
         binary,

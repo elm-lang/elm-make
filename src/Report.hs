@@ -9,6 +9,7 @@ import qualified Elm.Package as Pkg
 import qualified Elm.Package.Paths as Path
 import Elm.Utils ((|>))
 import GHC.IO.Handle (hIsTerminalDevice)
+import System.Console.ANSI
 import System.Exit (exitFailure)
 import System.IO (hFlush, hPutStr, hPutStrLn, stderr, stdout)
 
@@ -104,7 +105,7 @@ normalLoop isTerminal warn messageChan rootPkg total successes failures =
 
                 errors
                   |> mapM_ (put Compiler.printError Compiler.errorToString dealiaser path source)
-                  |> errorMessage rootPkg pkg path
+                  |> errorMessage failures rootPkg pkg path
 
                 go successes (failures + 1)
 
@@ -123,44 +124,53 @@ normalLoop isTerminal warn messageChan rootPkg total successes failures =
 
 -- ERROR MESSAGE
 
-errorMessage :: Package -> Package -> FilePath -> IO () -> IO ()
-errorMessage rootPkg errorPkg path printMessage =
-  if errorPkg /= rootPkg then
-      hPutStr stderr (dependencyError errorPkg)
+errorMessage :: Int -> Package -> Package -> FilePath -> IO () -> IO ()
+errorMessage numFailures rootPkg errorPkg path printMessage =
+  do  when (numFailures > 0) $
+        let
+          pads = replicate ((80 - 2 - 6) `div` 2) '='
+        in
+          do  hSetSGR stderr [SetColor Foreground Dull Red]
+              hPutStr stderr (pads ++ " ERRORS " ++ pads ++ "\n\n")
+              hSetSGR stderr [Reset]
 
-  else
-      do  hPutStr stderr (header "ERRORS" path)
+      if errorPkg /= rootPkg
+        then
+          hPutStr stderr (dependencyError errorPkg)
+
+        else
           printMessage
 
 
 dependencyError :: Package -> String
 dependencyError (pkgName, version) =
-    header "ERRORS" ("dependency " ++ Pkg.toString pkgName ++ " " ++ Pkg.versionToString version)
-    ++ "This error probably means that the '" ++ Pkg.toString pkgName ++ "' has some\n"
-    ++ "package constraint that is too permissive. You should definitely inform the\n"
-    ++ "maintainer to get this fixed and save other people from this pain.\n\n"
-    ++ "In the meantime, you can attempt to artificially constrain things by adding\n"
-    ++ "some extra constraints to your " ++ Path.description ++ " though that is not\n"
-    ++ "the long term solution.\n\n\n"
+    "Problem in dependency " ++ Pkg.toString pkgName ++ " " ++ Pkg.versionToString version ++ "\n"
+    ++ "\n"
+    ++ "The elm-package.json constraints of '" ++ Pkg.toString pkgName ++ "' are probably\n"
+    ++ "letting too much stuff through. Definitely open an issue on the relevant github\n"
+    ++ "repo to get this fixed and save other people from this pain.\n"
+    ++ "\n"
+    ++ "In the meantime, take a look through the direct dependencies of the broken\n"
+    ++ "package and see if any of them have had releases recently. If you find the new\n"
+    ++ "thing that is causing problems, you can artificially constrain things by adding\n"
+    ++ "some extra constraints to your " ++ Path.description ++ " as a stopgap measure.\n\n\n"
 
 
 -- WARNING MESSAGE
 
 warningMessage :: Package -> Package -> FilePath -> IO () -> IO ()
 warningMessage rootPkg warningPkg path printMessage =
-  if warningPkg /= rootPkg
-    then return ()
-    else
-      do  hPutStr stderr (header "WARNINGS" path)
-          printMessage
+  if warningPkg /= rootPkg then
+      return ()
 
-
-header :: String -> FilePath -> String
-header title path =
-  let
-    start = "## " ++ title ++ " in " ++ path ++ " "
-  in
-    start ++ replicate (80 - length start) '#' ++ "\n\n"
+  else
+      let
+        pads = replicate ((80 - 2 - 8) `div` 2) '='
+      in
+        do  hSetSGR stderr [SetColor Foreground Dull Yellow]
+            hPutStr stderr (pads ++ " WARNINGS " ++ pads ++ "\n\n")
+            hSetSGR stderr [Reset]
+            printMessage
 
 
 -- PROGRESS BAR
