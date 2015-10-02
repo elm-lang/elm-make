@@ -42,7 +42,12 @@ crawl config =
       desc <- withExceptT BM.PackageProblem (Desc.read Path.description)
 
       (moduleForGeneration, packageGraph) <-
-          CrawlPackage.dfsFromFiles "." solution desc (BM._files config)
+          case BM._files config of
+            [] ->
+                (,) [] <$> CrawlPackage.dfsFromExposedModules "." solution desc
+
+            filePaths ->
+                CrawlPackage.dfsFromFiles "." solution desc filePaths
 
       let thisPackage =
             (Desc.name desc, Desc.version desc)
