@@ -6,7 +6,6 @@ data we have so far" formatted in a way that will be nice for the next stage.
 The idea is that our implementation should be guiding us between these models.
 -}
 
-import Control.Applicative ((<$>), (<*>))
 import Data.Binary
 import qualified Data.Map as Map
 import qualified Elm.Compiler.Module as Module

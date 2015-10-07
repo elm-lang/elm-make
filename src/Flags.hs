@@ -1,10 +1,10 @@
 {-# OPTIONS_GHC -Wall #-}
 module Flags where
 
-import Control.Applicative ((<$>), (<*>), many, optional)
+import Control.Applicative (many, optional)
 import Control.Monad.Except (liftIO)
 import qualified Data.List as List
-import Data.Monoid ((<>), mconcat, mempty)
+import Data.Monoid ((<>))
 import Data.Version (showVersion)
 import qualified Elm.Compiler as Compiler
 import qualified Elm.Package as Pkg
