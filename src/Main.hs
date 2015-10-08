@@ -5,7 +5,6 @@ import Control.Monad.Except (liftIO)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import System.Exit (exitFailure)
-import System.IO (hPutStrLn, stderr)
 import GHC.Conc (getNumProcessors, setNumCapabilities)
 
 import qualified BuildManager as BM
@@ -25,10 +24,11 @@ main =
       result <- BM.run (make numProcessors)
       case result of
         Right (_, timeline) ->
-          putStrLn (BM.timelineToString timeline)
+          -- putStrLn (BM.timelineToString timeline)
+          return ()
 
         Left err ->
-          do  hPutStrLn stderr (BM.errorToString err)
+          do  BM.printError err
               exitFailure
 
 
