@@ -141,14 +141,14 @@ buildManager env state =
           Chan.writeChan (docsChan env) (documentation state)
 
     Wait ->
-      do  (Result source path modul threadId dealiaser warnings result) <-
+      do  (Result source path modul threadId localizer warnings result) <-
               Chan.readChan (resultChan env)
 
           if null warnings
             then return ()
             else
               Chan.writeChan (reportChan env)
-                  (Report.Warn modul dealiaser path source warnings)
+                  (Report.Warn modul localizer path source warnings)
 
           case result of
             Right (Compiler.Result maybeDocs interface js) ->
@@ -159,7 +159,7 @@ buildManager env state =
                   buildManager env (registerSuccess env state modul interface maybeDocs threadId)
 
             Left errors ->
-              do  Chan.writeChan (reportChan env) (Report.Error modul dealiaser path source errors)
+              do  Chan.writeChan (reportChan env) (Report.Error modul localizer path source errors)
                   buildManager env (registerFailure state threadId)
 
     Update ->
@@ -270,12 +270,12 @@ buildModule env interfaces (modul, location) =
   in
   do  source <- readFile path
 
-      let (dealiaser, warnings, rawResult) =
+      let (localizer, warnings, rawResult) =
             Compiler.compile context source ifaces
 
       threadId <- myThreadId
       let result =
-            Result source path modul threadId dealiaser warnings rawResult
+            Result source path modul threadId localizer warnings rawResult
 
       Chan.writeChan (resultChan env) result
 
@@ -290,7 +290,7 @@ data Result = Result
     , _path :: FilePath
     , _moduleID :: CanonicalModule
     , _threadId :: ThreadId
-    , _dealiaser :: Compiler.Dealiaser
+    , _localizer :: Compiler.Localizer
     , _warnings :: [Compiler.Warning]
     , _result :: Either [Compiler.Error] Compiler.Result
     }

@@ -143,7 +143,7 @@ printError :: Error -> IO ()
 printError err =
   case err of
     CompilerErrors path source errors ->
-        mapM_ (Compiler.printError Compiler.dummyDealiaser path source) errors
+        mapM_ (Compiler.printError stderr Compiler.dummyLocalizer path source) errors
 
     CorruptedArtifact filePath ->
         hPutStrLn stderr $

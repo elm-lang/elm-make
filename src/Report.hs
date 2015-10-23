@@ -22,8 +22,8 @@ data Type = Normal | Json
 data Message
     = Close
     | Complete CanonicalModule
-    | Error CanonicalModule Compiler.Dealiaser FilePath String [Compiler.Error]
-    | Warn CanonicalModule Compiler.Dealiaser FilePath String [Compiler.Warning]
+    | Error CanonicalModule Compiler.Localizer FilePath String [Compiler.Error]
+    | Warn CanonicalModule Compiler.Localizer FilePath String [Compiler.Warning]
 
 
 -- REPORTING THREAD
@@ -51,18 +51,18 @@ jsonLoop messageChan failures =
         Complete _moduleID ->
             jsonLoop messageChan failures
 
-        Error _moduleID dealiaser path _source errors ->
+        Error _moduleID localizer path _source errors ->
             let
               errorObjects =
-                map (Compiler.errorToJson dealiaser path) errors
+                map (Compiler.errorToJson localizer path) errors
             in
               do  BS.putStrLn (Json.encode errorObjects)
                   jsonLoop messageChan (failures + 1)
 
-        Warn _moduleID dealiaser path _source warnings ->
+        Warn _moduleID localizer path _source warnings ->
             let
               warningObjects =
-                map (Compiler.warningToJson dealiaser path) warnings
+                map (Compiler.warningToJson localizer path) warnings
             in
               do  BS.putStrLn (Json.encode warningObjects)
                   jsonLoop messageChan failures
@@ -76,11 +76,11 @@ normalLoop isTerminal warn messageChan rootPkg total successes failures =
     go =
       normalLoop isTerminal warn messageChan rootPkg total
 
-    put withColor withoutColor dealiaser path source errors =
+    put withColor withoutColor localizer path source errors =
       if isTerminal then
-        withColor dealiaser path source errors
+        withColor stderr localizer path source errors
       else
-        hPutStr stderr (withoutColor dealiaser path source errors)
+        hPutStr stderr (withoutColor localizer path source errors)
 
   in
   do  when isTerminal $
@@ -100,23 +100,23 @@ normalLoop isTerminal warn messageChan rootPkg total successes failures =
             do  hPutStrLn stdout (closeMessage failures total)
                 when (failures > 0) exitFailure
 
-        Error (CanonicalModule pkg _) dealiaser path source errors ->
+        Error (CanonicalModule pkg _) localizer path source errors ->
             do  hFlush stdout
 
                 errors
-                  |> mapM_ (put Compiler.printError Compiler.errorToString dealiaser path source)
+                  |> mapM_ (put Compiler.printError Compiler.errorToString localizer path source)
                   |> errorMessage failures rootPkg pkg path
 
                 go successes (failures + 1)
 
-        Warn (CanonicalModule pkg _) dealiaser path source warnings ->
+        Warn (CanonicalModule pkg _) localizer path source warnings ->
             if not warn then
               go successes failures
             else
               do  hFlush stdout
 
                   warnings
-                    |> mapM_ (put Compiler.printWarning Compiler.warningToString dealiaser path source)
+                    |> mapM_ (put Compiler.printWarning Compiler.warningToString localizer path source)
                     |> warningMessage rootPkg pkg path
 
                   go successes failures
