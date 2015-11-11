@@ -144,22 +144,16 @@ buildManager env state =
       do  (Result source path modul threadId localizer warnings result) <-
               Chan.readChan (resultChan env)
 
-          if null warnings
-            then return ()
-            else
-              Chan.writeChan (reportChan env)
-                  (Report.Warn modul localizer path source warnings)
-
           case result of
             Right (Compiler.Result maybeDocs interface js) ->
               do  let cache = cachePath env
                   File.writeBinary (Path.toInterface cache modul) interface
                   writeFile (Path.toObjectFile cache modul) js
-                  Chan.writeChan (reportChan env) (Report.Complete modul)
+                  Chan.writeChan (reportChan env) (Report.Complete modul localizer path source warnings)
                   buildManager env (registerSuccess env state modul interface maybeDocs threadId)
 
             Left errors ->
-              do  Chan.writeChan (reportChan env) (Report.Error modul localizer path source errors)
+              do  Chan.writeChan (reportChan env) (Report.Error modul localizer path source warnings errors)
                   buildManager env (registerFailure state threadId)
 
     Update ->

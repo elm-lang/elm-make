@@ -7,7 +7,6 @@ import qualified Data.ByteString.Lazy.Char8 as BS
 import qualified Elm.Compiler as Compiler
 import qualified Elm.Package as Pkg
 import qualified Elm.Package.Paths as Path
-import Elm.Utils ((|>))
 import GHC.IO.Handle (hIsTerminalDevice)
 import System.Console.ANSI
 import System.Exit (exitFailure)
@@ -21,12 +20,13 @@ data Type = Normal | Json
 
 data Message
     = Close
-    | Complete CanonicalModule
-    | Error CanonicalModule Compiler.Localizer FilePath String [Compiler.Error]
-    | Warn CanonicalModule Compiler.Localizer FilePath String [Compiler.Warning]
+    | Complete CanonicalModule Compiler.Localizer FilePath String [Compiler.Warning]
+    | Error CanonicalModule Compiler.Localizer FilePath String [Compiler.Warning] [Compiler.Error]
+
 
 
 -- REPORTING THREAD
+
 
 thread :: Type -> Bool -> Chan.Chan Message -> Package -> Int -> IO ()
 thread reportType warn messageChan rootPkg totalTasks =
@@ -36,39 +36,45 @@ thread reportType warn messageChan rootPkg totalTasks =
             normalLoop isTerminal warn messageChan rootPkg totalTasks 0 0
 
     Json ->
-        jsonLoop messageChan 0
+        jsonLoop messageChan rootPkg 0
+
 
 
 -- JSON LOOP
 
-jsonLoop :: Chan.Chan Message -> Int -> IO ()
-jsonLoop messageChan failures =
+
+jsonLoop :: Chan.Chan Message -> Package -> Int -> IO ()
+jsonLoop messageChan rootPkg failures =
   do  message <- Chan.readChan messageChan
       case message of
         Close ->
             when (failures > 0) exitFailure
 
-        Complete _moduleID ->
-            jsonLoop messageChan failures
+        Complete (CanonicalModule pkg _) localizer path _ warnings ->
+            do  when (pkg == rootPkg) $
+                  printJsonList (Compiler.warningToJson localizer path) warnings
+                jsonLoop messageChan rootPkg failures
 
-        Error _moduleID localizer path _source errors ->
-            let
-              errorObjects =
-                map (Compiler.errorToJson localizer path) errors
-            in
-              do  BS.putStrLn (Json.encode errorObjects)
-                  jsonLoop messageChan (failures + 1)
+        Error (CanonicalModule pkg _) localizer path _source warnings errors ->
+            do  when (pkg == rootPkg) $
+                  printJsonList (Compiler.warningToJson localizer path) warnings
+                printJsonList (Compiler.errorToJson localizer path) errors
+                jsonLoop messageChan rootPkg (failures + 1)
 
-        Warn _moduleID localizer path _source warnings ->
-            let
-              warningObjects =
-                map (Compiler.warningToJson localizer path) warnings
-            in
-              do  BS.putStrLn (Json.encode warningObjects)
-                  jsonLoop messageChan failures
+
+printJsonList :: (a -> Json.Value) -> [a] -> IO ()
+printJsonList toJson values =
+  case values of
+    [] ->
+      return ()
+
+    _ ->
+      BS.putStrLn (Json.encode (map toJson values))
+
 
 
 -- NORMAL LOOP
+
 
 normalLoop :: Bool -> Bool -> Chan.Chan Message -> Package -> Int -> Int -> Int -> IO ()
 normalLoop isTerminal warn messageChan rootPkg total successes failures =
@@ -76,12 +82,17 @@ normalLoop isTerminal warn messageChan rootPkg total successes failures =
     go =
       normalLoop isTerminal warn messageChan rootPkg total
 
-    put withColor withoutColor localizer path source errors =
+    put withColor withoutColor localizer path source value =
       if isTerminal then
-        withColor stderr localizer path source errors
+        withColor stderr localizer path source value
       else
-        hPutStr stderr (withoutColor localizer path source errors)
+        hPutStr stderr (withoutColor localizer path source value)
 
+    putWarning =
+      put Compiler.printWarning Compiler.warningToString
+
+    putError =
+      put Compiler.printError Compiler.errorToString
   in
   do  when isTerminal $
           do  hPutStr stdout (renderProgressBar successes failures total)
@@ -93,53 +104,35 @@ normalLoop isTerminal warn messageChan rootPkg total successes failures =
           hPutStr stdout clearProgressBar
 
       case update of
-        Complete _moduleID ->
-            go (successes + 1) failures
-
         Close ->
             do  hPutStrLn stdout (closeMessage failures total)
                 when (failures > 0) exitFailure
 
-        Error (CanonicalModule pkg _) localizer path source errors ->
+        Complete (CanonicalModule pkg _) localizer path source warnings ->
+            do  when (pkg == rootPkg && warn && not (null warnings)) $
+                    do  hFlush stdout
+                        printSeparator "WARNINGS"
+                        mapM_ (putWarning localizer path source) warnings
+
+                go (successes + 1) failures
+
+        Error (CanonicalModule pkg _) localizer path source warnings errors ->
             do  hFlush stdout
 
-                errors
-                  |> mapM_ (put Compiler.printError Compiler.errorToString localizer path source)
-                  |> errorMessage failures rootPkg pkg path
+                when (pkg == rootPkg && warn && not (null warnings)) $
+                    do  printSeparator "WARNINGS"
+                        mapM_ (putWarning localizer path source) warnings
+
+
+                if pkg == rootPkg
+                  then
+                    do  when (length warnings + failures > 0) (printSeparator "ERRORS")
+                        mapM_ (putError localizer path source) errors
+
+                  else
+                    hPutStr stderr (dependencyError pkg)
 
                 go successes (failures + 1)
-
-        Warn (CanonicalModule pkg _) localizer path source warnings ->
-            if not warn then
-              go successes failures
-            else
-              do  hFlush stdout
-
-                  warnings
-                    |> mapM_ (put Compiler.printWarning Compiler.warningToString localizer path source)
-                    |> warningMessage rootPkg pkg path
-
-                  go successes failures
-
-
--- ERROR MESSAGE
-
-errorMessage :: Int -> Package -> Package -> FilePath -> IO () -> IO ()
-errorMessage numFailures rootPkg errorPkg path printMessage =
-  do  when (numFailures > 0) $
-        let
-          pads = replicate ((80 - 2 - 6) `div` 2) '='
-        in
-          do  hSetSGR stderr [SetColor Foreground Dull Red]
-              hPutStr stderr (pads ++ " ERRORS " ++ pads ++ "\n\n")
-              hSetSGR stderr [Reset]
-
-      if errorPkg /= rootPkg
-        then
-          hPutStr stderr (dependencyError errorPkg)
-
-        else
-          printMessage
 
 
 dependencyError :: Package -> String
@@ -156,27 +149,33 @@ dependencyError (pkgName, version) =
     ++ "some extra constraints to your " ++ Path.description ++ " as a stopgap measure.\n\n\n"
 
 
--- WARNING MESSAGE
+printSeparator :: String -> IO ()
+printSeparator header =
+  let
+    total =
+      80 - 2 - length header
 
-warningMessage :: Package -> Package -> FilePath -> IO () -> IO ()
-warningMessage rootPkg warningPkg path printMessage =
-  if warningPkg /= rootPkg then
-      return ()
+    left =
+      total `div` 2
 
-  else
-      let
-        pads = replicate ((80 - 2 - 8) `div` 2) '='
-      in
-        do  hSetSGR stderr [SetColor Foreground Dull Yellow]
-            hPutStr stderr (pads ++ " WARNINGS " ++ pads ++ "\n\n")
-            hSetSGR stderr [Reset]
-            printMessage
+    right =
+      total - left
+
+    mkPad n =
+      replicate n '='
+  in
+    do  hSetSGR stderr [SetColor Foreground Dull Blue]
+        hPutStr stderr (mkPad left ++ " " ++ header ++ " " ++ mkPad right ++ "\n\n")
+        hSetSGR stderr [Reset]
+
 
 
 -- PROGRESS BAR
 
+
 barLength :: Float
-barLength = 50.0
+barLength =
+  50.0
 
 
 renderProgressBar :: Int -> Int -> Int -> String
@@ -194,7 +193,9 @@ clearProgressBar =
     '\r' : replicate (length (renderProgressBar 49999 50000 99999)) ' ' ++ "\r"
 
 
+
 -- CLOSE MESSAGE
+
 
 closeMessage :: Int -> Int -> String
 closeMessage failures total =
