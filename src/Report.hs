@@ -111,7 +111,7 @@ normalLoop isTerminal warn messageChan rootPkg total successes failures =
         Complete (CanonicalModule pkg _) localizer path source warnings ->
             do  when (pkg == rootPkg && warn && not (null warnings)) $
                     do  hFlush stdout
-                        printSeparator "WARNINGS"
+                        printSeparator Yellow "WARNINGS"
                         mapM_ (putWarning localizer path source) warnings
 
                 go (successes + 1) failures
@@ -120,13 +120,13 @@ normalLoop isTerminal warn messageChan rootPkg total successes failures =
             do  hFlush stdout
 
                 when (pkg == rootPkg && warn && not (null warnings)) $
-                    do  printSeparator "WARNINGS"
+                    do  printSeparator Yellow "WARNINGS"
                         mapM_ (putWarning localizer path source) warnings
 
 
                 if pkg == rootPkg
                   then
-                    do  when (length warnings + failures > 0) (printSeparator "ERRORS")
+                    do  when (length warnings + failures > 0) (printSeparator Red "ERRORS")
                         mapM_ (putError localizer path source) errors
 
                   else
@@ -149,8 +149,8 @@ dependencyError (pkgName, version) =
     ++ "some extra constraints to your " ++ Path.description ++ " as a stopgap measure.\n\n\n"
 
 
-printSeparator :: String -> IO ()
-printSeparator header =
+printSeparator :: Color -> String -> IO ()
+printSeparator color header =
   let
     total =
       80 - 2 - length header
@@ -164,7 +164,7 @@ printSeparator header =
     mkPad n =
       replicate n '='
   in
-    do  hSetSGR stderr [SetColor Foreground Dull Blue]
+    do  hSetSGR stderr [SetColor Foreground Dull color]
         hPutStr stderr (mkPad left ++ " " ++ header ++ " " ++ mkPad right ++ "\n\n")
         hSetSGR stderr [Reset]
 
