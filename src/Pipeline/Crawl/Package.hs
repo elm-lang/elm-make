@@ -92,11 +92,11 @@ dfs allowNatives pkgName ((name,maybeParent) : unvisited) env summary =
   do  filePaths <- find allowNatives name (_sourceDirs env)
       case (filePaths, Map.lookup name (_availableForeignModules env)) of
         ([Elm filePath], Nothing) ->
-            do  (name, (pkgData, newUnvisited)) <-
+            do  (statedName, (pkgData, newUnvisited)) <-
                     readPackageData pkgName (Just name) filePath
 
                 dfs allowNatives pkgName (newUnvisited ++ unvisited) env $ summary {
-                    packageData = Map.insert name pkgData (packageData summary)
+                    packageData = Map.insert statedName pkgData (packageData summary)
                 }
 
         ([JS filePath], Nothing) ->

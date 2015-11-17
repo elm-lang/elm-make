@@ -23,7 +23,7 @@ main =
 
       result <- BM.run (make numProcessors)
       case result of
-        Right (_, timeline) ->
+        Right (_, _timeline) ->
           -- putStrLn (BM.timelineToString timeline)
           return ()
 
