@@ -33,6 +33,7 @@ data Config = Config
 data Output
     = Html FilePath
     | JS FilePath
+    | DevNull
 
 
 outputFilePath :: Config -> FilePath
@@ -40,6 +41,7 @@ outputFilePath config =
   case _output config of
     Html file -> file
     JS file -> file
+    DevNull -> "/dev/null"
 
 
 artifactDirectory :: FilePath

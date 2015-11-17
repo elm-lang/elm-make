@@ -127,6 +127,9 @@ output =
         else if ext == ".js" then
           Just (BM.JS path)
 
+        else if path == "/dev/null" then
+          Just BM.DevNull
+
         else
           Nothing
 

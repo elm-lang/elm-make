@@ -63,11 +63,11 @@ generate config dependencies natives rootModules =
 
       case BM._output config of
         BM.Html outputFile ->
-            liftIO $
-              do  js <- mapM File.readTextUtf8 objectFiles
-                  let (Just (CanonicalModule _ moduleName)) = Maybe.listToMaybe rootModules
-                  let outputText = html (Text.concat (header:js)) moduleName
-                  LazyText.writeFile outputFile outputText
+          liftIO $
+            do  js <- mapM File.readTextUtf8 objectFiles
+                let (Just (CanonicalModule _ moduleName)) = Maybe.listToMaybe rootModules
+                let outputText = html (Text.concat (header:js)) moduleName
+                LazyText.writeFile outputFile outputText
 
         BM.JS outputFile ->
           liftIO $
@@ -75,6 +75,9 @@ generate config dependencies natives rootModules =
               do  Text.hPutStrLn handle header
                   forM_ objectFiles $ \jsFile ->
                       Text.hPutStrLn handle =<< File.readTextUtf8 jsFile
+
+        BM.DevNull ->
+          return ()
 
       liftIO (putStrLn ("Successfully generated " ++ outputFile))
 
