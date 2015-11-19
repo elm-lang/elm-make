@@ -111,7 +111,7 @@ normalLoop isTerminal warn messageChan rootPkg total successes failures =
         Complete (CanonicalModule pkg _) localizer path source warnings ->
             do  when (pkg == rootPkg && warn && not (null warnings)) $
                     do  hFlush stdout
-                        printSeparator Yellow "WARNINGS"
+                        printSeparator isTerminal Yellow "WARNINGS"
                         mapM_ (putWarning localizer path source) warnings
 
                 go (successes + 1) failures
@@ -120,13 +120,13 @@ normalLoop isTerminal warn messageChan rootPkg total successes failures =
             do  hFlush stdout
 
                 when (pkg == rootPkg && warn && not (null warnings)) $
-                    do  printSeparator Yellow "WARNINGS"
+                    do  printSeparator isTerminal Yellow "WARNINGS"
                         mapM_ (putWarning localizer path source) warnings
 
 
                 if pkg == rootPkg
                   then
-                    do  when (length warnings + failures > 0) (printSeparator Red "ERRORS")
+                    do  when (length warnings + failures > 0) (printSeparator isTerminal Red "ERRORS")
                         mapM_ (putError localizer path source) errors
 
                   else
@@ -149,8 +149,8 @@ dependencyError (pkgName, version) =
     ++ "some extra constraints to your " ++ Path.description ++ " as a stopgap measure.\n\n\n"
 
 
-printSeparator :: Color -> String -> IO ()
-printSeparator color header =
+printSeparator :: Bool -> Color -> String -> IO ()
+printSeparator isTerminal color header =
   let
     total =
       80 - 2 - length header
@@ -164,9 +164,9 @@ printSeparator color header =
     mkPad n =
       replicate n '='
   in
-    do  hSetSGR stderr [SetColor Foreground Dull color]
+    do  when isTerminal $ hSetSGR stderr [SetColor Foreground Dull color]
         hPutStr stderr (mkPad left ++ " " ++ header ++ " " ++ mkPad right ++ "\n\n")
-        hSetSGR stderr [Reset]
+        when isTerminal $ hSetSGR stderr [Reset]
 
 
 
