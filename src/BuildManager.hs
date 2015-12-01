@@ -173,7 +173,7 @@ printError err =
 
     ModuleNotFound name maybeParent ->
         hPutStrLn stderr $
-          "I cannot find find module '" ++ Module.nameToString name ++ "'.\n"
+          "I cannot find module '" ++ Module.nameToString name ++ "'.\n"
           ++ "\n"
           ++ toContext maybeParent
           ++ "\n"
