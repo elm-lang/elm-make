@@ -50,8 +50,7 @@ Executable elm-make
         Pipeline.Plan,
         Report,
         TheMasterPlan,
-        Utils.File,
-        Utils.Queue
+        Utils.File
 
     Build-depends:
         aeson,

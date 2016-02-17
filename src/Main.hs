@@ -18,22 +18,21 @@ import TheMasterPlan (ProjectGraph(..), ProjectData(..))
 
 main :: IO ()
 main =
-  do  numProcessors <- getNumProcessors
-      setNumCapabilities numProcessors
+  do  setNumCapabilities =<< getNumProcessors
 
-      result <- BM.run (make numProcessors)
+      result <- BM.run make
       case result of
         Right (_, _timeline) ->
-          -- putStrLn (BM.timelineToString timeline)
-          return ()
+          do  -- putStrLn (BM.timelineToString _timeline)
+              return ()
 
         Left err ->
           do  BM.printError err
               exitFailure
 
 
-make :: Int -> BM.Task ()
-make numProcessors =
+make :: BM.Task ()
+make =
   do  config <- Flags.toConfig
 
       (Crawl.ProjectInfo thisPackage exposedModules moduleForGeneration projectSummary) <-
@@ -52,7 +51,6 @@ make numProcessors =
         BM.phase "Compile" $ liftIO $
           Compile.build
             config
-            numProcessors
             thisPackage
             exposedModules
             moduleForGeneration
