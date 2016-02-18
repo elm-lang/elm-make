@@ -19,7 +19,9 @@ import qualified TheMasterPlan as TMP
 import TheMasterPlan ( PackageGraph(..), PackageData(..) )
 
 
+
 -- STATE and ENVIRONMENT
+
 
 data Env = Env
     { _sourceDirs :: [FilePath]
@@ -34,7 +36,9 @@ initEnv root desc solution =
       return (Env sourceDirs availableForeignModules)
 
 
+
 -- GENERIC CRAWLER
+
 
 dfsFromFiles
     :: FilePath
@@ -72,7 +76,9 @@ dfsFromExposedModules root solution desc =
 
 
 
+
 -- DEPTH FIRST SEARCH
+
 
 dfs :: Bool
     -> Pkg.Name
@@ -122,7 +128,9 @@ dfs allowNatives pkgName ((name,maybeParent) : unvisited) env summary =
                 (maybe [] (map fst) maybePkgs)
 
 
+
 -- FIND LOCAL FILE PATH
+
 
 data CodePath = Elm FilePath | JS FilePath
 
@@ -170,6 +178,7 @@ findHelp allowNatives locations moduleName (dir:srcDirs) =
 
 -- READ and VALIDATE PACKAGE DATA for a file
 
+
 readPackageData
     :: Pkg.Name
     -> Maybe Module.Name
@@ -210,7 +219,9 @@ addParent maybeParent names =
     map (\name -> (name, maybeParent)) names
 
 
+
 -- FOREIGN MODULES -- which ones are available, who exposes them?
+
 
 readAvailableForeignModules
     :: Desc.Description
