@@ -20,6 +20,7 @@ import TheMasterPlan
     )
 
 
+
 planBuild :: BM.Config -> Set.Set CanonicalModule -> ProjectGraph Location -> BM.Task BuildGraph
 planBuild config modulesToDocument (ProjectGraph projectData _projectNatives) =
   do  enhancedData <- addInterfaces (BM._artifactDirectory config) projectData
@@ -27,7 +28,9 @@ planBuild config modulesToDocument (ProjectGraph projectData _projectNatives) =
       return (toBuildGraph filteredData)
 
 
+
 --- LOAD INTERFACES -- what has already been compiled?
+
 
 addInterfaces
     :: FilePath
@@ -80,7 +83,9 @@ isMain (CanonicalModule _ (Module.Name names)) =
       _ -> False
 
 
+
 -- FILTER STALE INTERFACES -- have files become stale due to other changes?
+
 
 filterStaleInterfaces
     :: Set.Set CanonicalModule
@@ -131,7 +136,9 @@ haveInterface enhancedGraph rawName =
             _ -> False
 
 
+
 -- FILTER DEPENDENCIES -- which modules actually need to be compiled?
+
 
 toBuildGraph
     :: Map.Map CanonicalModule (ProjectData (Either Location Module.Interface))
@@ -188,7 +195,9 @@ filterNativeDeps name =
           Just name
 
 
+
 -- SORT GRAPHS / CHECK FOR CYCLES
+
 
 topologicalSort :: Map.Map CanonicalModule [CanonicalModule] -> BM.Task [CanonicalModule]
 topologicalSort dependencies =
