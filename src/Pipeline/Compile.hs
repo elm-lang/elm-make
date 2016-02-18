@@ -183,16 +183,17 @@ registerSuccess env state name interface maybeDocs =
         (blockedModules state)
         (Maybe.fromMaybe [] (Map.lookup name (reverseDependencies env)))
 
+    readyList =
+      Maybe.catMaybes readyModules
+
     newCompletedInterfaces =
       Map.insert name interface (completedInterfaces state)
   in
-    do  mapM
-          (forkIO . buildModule env newCompletedInterfaces)
-          (Maybe.catMaybes readyModules)
+    do  mapM (forkIO . buildModule env newCompletedInterfaces) readyList
 
         return $
           state
-            { numActiveThreads = numActiveThreads state - 1
+            { numActiveThreads = numActiveThreads state - 1 + length readyList
             , blockedModules = updatedBlockedModules
             , completedInterfaces = newCompletedInterfaces
             , documentation = maybe id (:) maybeDocs (documentation state)
