@@ -70,7 +70,7 @@ dfsFromExposedModules
     -> BM.Task PackageGraph
 dfsFromExposedModules root solution desc =
   do  env <- initEnv root desc solution
-      let unvisited = addParent Nothing (Desc.exposed desc)
+      let unvisited = map (Unvisited Nothing) (Desc.exposed desc)
       let summary = PackageGraph Map.empty Map.empty Map.empty
       dfs (Desc.natives desc) (Desc.name desc) unvisited env summary
 
@@ -80,22 +80,34 @@ dfsFromExposedModules root solution desc =
 -- DEPTH FIRST SEARCH
 
 
-dfs :: Bool
-    -> Pkg.Name
-    -> [(Module.Name, Maybe Module.Name)]
-    -> Env
-    -> PackageGraph
-    -> BM.Task PackageGraph
+data Unvisited =
+  Unvisited
+    { _parent :: Maybe Module.Name
+    , _name :: Module.Name
+    }
 
-dfs _allowNatives _pkgName [] _env summary =
-    return summary
 
-dfs allowNatives pkgName ((name,_) : unvisited) env summary
-    | Map.member name (packageData summary) =
-        dfs allowNatives pkgName unvisited env summary
+dfs :: Bool -> Pkg.Name -> [Unvisited] -> Env -> PackageGraph -> BM.Task PackageGraph
+dfs allowNatives pkgName unvisited env summary =
+  case unvisited of
+    [] ->
+      return summary
 
-dfs allowNatives pkgName ((name,maybeParent) : unvisited) env summary =
-  do  filePaths <- find allowNatives name (_sourceDirs env)
+    next@(Unvisited _ name) : rest ->
+      if Map.member name (packageData summary) then
+        dfs allowNatives pkgName rest env summary
+
+      else
+        dfsHelp allowNatives pkgName next rest env summary
+
+
+dfsHelp :: Bool -> Pkg.Name -> Unvisited -> [Unvisited] -> Env -> PackageGraph -> BM.Task PackageGraph
+dfsHelp allowNatives pkgName (Unvisited maybeParent name) unvisited env summary =
+  do  -- find all paths that match the unvisited module name
+      filePaths <-
+        find allowNatives name (_sourceDirs env)
+
+      -- see if we found a unique path for the name
       case (filePaths, Map.lookup name (_availableForeignModules env)) of
         ([Elm filePath], Nothing) ->
             do  (statedName, (pkgData, newUnvisited)) <-
@@ -176,14 +188,14 @@ findHelp allowNatives locations moduleName (dir:srcDirs) =
 
 
 
--- READ and VALIDATE PACKAGE DATA for a file
+-- READ and VALIDATE PACKAGE DATA for an ELM file
 
 
 readPackageData
     :: Pkg.Name
     -> Maybe Module.Name
     -> FilePath
-    -> BM.Task (Module.Name, (PackageData, [(Module.Name, Maybe Module.Name)]))
+    -> BM.Task (Module.Name, (PackageData, [Unvisited]))
 readPackageData pkgName maybeName filePath =
   do  sourceCode <- liftIO (File.readStringUtf8 filePath)
 
@@ -201,22 +213,22 @@ readPackageData pkgName maybeName filePath =
               then rawDeps
               else Module.defaultImports ++ rawDeps
 
-      return (name, (PackageData filePath deps, addParent (Just name) deps))
+      return
+        ( name
+        , ( PackageData filePath deps
+          , map (Unvisited (Just name)) deps
+          )
+        )
 
 
 checkName :: FilePath -> Module.Name -> Maybe Module.Name -> BM.Task ()
 checkName path nameFromSource maybeName =
-    case maybeName of
-      Nothing -> return ()
-      Just nameFromPath
-        | nameFromSource == nameFromPath -> return ()
-        | otherwise ->
-            throwError (BM.ModuleName path nameFromPath nameFromSource)
+  case maybeName of
+    Just nameFromPath | nameFromSource /= nameFromPath ->
+      throwError (BM.ModuleName path nameFromPath nameFromSource)
 
-
-addParent :: Maybe Module.Name -> [Module.Name] -> [(Module.Name, Maybe Module.Name)]
-addParent maybeParent names =
-    map (\name -> (name, maybeParent)) names
+    _ ->
+      return ()
 
 
 
