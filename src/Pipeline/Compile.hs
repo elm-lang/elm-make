@@ -237,11 +237,11 @@ buildModule env interfaces (modul, location) =
   let
     packageName = fst (TMP.package modul)
     path = Path.toSource location
-    ifaces = Map.mapKeys simplifyModuleName interfaces
+    ifaces = Map.mapKeys TMP.simplifyModuleName interfaces
     isExposed = Set.member modul (exposedModules env)
 
     deps =
-        map simplifyModuleName ((Map.!) (dependencies env) modul)
+        map TMP.simplifyModuleName ((Map.!) (dependencies env) modul)
 
     context =
         Compiler.Context packageName isExposed deps
@@ -255,11 +255,6 @@ buildModule env interfaces (modul, location) =
             Result source path modul localizer warnings rawResult
 
       Chan.writeChan (resultChan env) result
-
-
-simplifyModuleName :: TMP.CanonicalModule -> Module.CanonicalName
-simplifyModuleName (TMP.CanonicalModule (pkg,_) name) =
-    Module.canonicalName pkg name
 
 
 data Result = Result

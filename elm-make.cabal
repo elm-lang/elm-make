@@ -68,5 +68,6 @@ Executable elm-make
         filepath,
         mtl >= 2.2.1 && < 3,
         optparse-applicative >=0.11 && <0.12,
+        raw-strings-qq,
         time,
         text

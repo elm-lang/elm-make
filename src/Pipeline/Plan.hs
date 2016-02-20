@@ -77,10 +77,8 @@ isFresh sourcePath interfacePath =
 
 
 isMain :: CanonicalModule -> Bool
-isMain (CanonicalModule _ (Module.Name names)) =
-    case names of
-      ["Main"] -> True
-      _ -> False
+isMain (CanonicalModule _ names) =
+  names == ["Main"]
 
 
 
@@ -188,7 +186,7 @@ filterCachedDeps interfaces name =
 filterNativeDeps :: CanonicalModule -> Maybe CanonicalModule
 filterNativeDeps name =
     case name of
-      CanonicalModule _pkg (Module.Name ("Native" : _)) ->
+      CanonicalModule _pkg ("Native" : _) ->
           Nothing
 
       _ ->

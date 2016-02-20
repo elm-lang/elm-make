@@ -114,7 +114,7 @@ canonicalizePackageGraph package (PackageGraph pkgData natives foreignDependenci
 
 canonicalizePackageData
     :: Package
-    -> Map.Map Module.Name Package
+    -> Map.Map Module.Raw Package
     -> PackageData
     -> ProjectData Location
 canonicalizePackageData package foreignDependencies (PackageData filePath deps) =
@@ -123,7 +123,7 @@ canonicalizePackageData package foreignDependencies (PackageData filePath deps) 
         projectDependencies = map canonicalizeModule deps
     }
   where
-    canonicalizeModule :: Module.Name -> CanonicalModule
+    canonicalizeModule :: Module.Raw -> CanonicalModule
     canonicalizeModule moduleName =
         case Map.lookup moduleName foreignDependencies of
           Nothing ->

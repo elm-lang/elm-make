@@ -15,7 +15,6 @@ import System.FilePath ((</>), (<.>))
 
 import qualified BuildManager as BM
 import qualified Utils.File as File
-import qualified TheMasterPlan as TMP
 import TheMasterPlan ( PackageGraph(..), PackageData(..) )
 
 
@@ -25,7 +24,7 @@ import TheMasterPlan ( PackageGraph(..), PackageData(..) )
 
 data Env = Env
     { _sourceDirs :: [FilePath]
-    , _availableForeignModules :: Map.Map Module.Name [(Pkg.Name, Pkg.Version)]
+    , _availableForeignModules :: Map.Map Module.Raw [(Pkg.Name, Pkg.Version)]
     }
 
 
@@ -45,7 +44,7 @@ dfsFromFiles
     -> Solution.Solution
     -> Desc.Description
     -> [FilePath]
-    -> BM.Task ([Module.Name], PackageGraph)
+    -> BM.Task ([Module.Raw], PackageGraph)
 
 dfsFromFiles root solution desc filePaths =
   do  env <- initEnv root desc solution
@@ -82,8 +81,8 @@ dfsFromExposedModules root solution desc =
 
 data Unvisited =
   Unvisited
-    { _parent :: Maybe Module.Name
-    , _name :: Module.Name
+    { _parent :: Maybe Module.Raw
+    , _name :: Module.Raw
     }
 
 
@@ -154,12 +153,12 @@ toFilePath codePath =
     JS file -> file
 
 
-find :: Bool -> Module.Name -> [FilePath] -> BM.Task [CodePath]
+find :: Bool -> Module.Raw -> [FilePath] -> BM.Task [CodePath]
 find allowNatives moduleName sourceDirs =
     findHelp allowNatives [] moduleName sourceDirs
 
 
-findHelp :: Bool -> [CodePath] -> Module.Name -> [FilePath] -> BM.Task [CodePath]
+findHelp :: Bool -> [CodePath] -> Module.Raw -> [FilePath] -> BM.Task [CodePath]
 findHelp _allowNatives locations _moduleName [] =
   return locations
 
@@ -181,8 +180,11 @@ findHelp allowNatives locations moduleName (dir:srcDirs) =
       do  let jsPath = dir </> Module.nameToPath moduleName <.> "js"
           jsExists <-
               case moduleName of
-                Module.Name ("Native" : _) -> liftIO (doesFileExist jsPath)
-                _ -> return False
+                "Native" : _ ->
+                  liftIO (doesFileExist jsPath)
+
+                _ ->
+                  return False
 
           return (consIf jsExists (JS jsPath) locs)
 
@@ -193,9 +195,9 @@ findHelp allowNatives locations moduleName (dir:srcDirs) =
 
 readPackageData
     :: Pkg.Name
-    -> Maybe Module.Name
+    -> Maybe Module.Raw
     -> FilePath
-    -> BM.Task (Module.Name, (PackageData, [Unvisited]))
+    -> BM.Task (Module.Raw, (PackageData, [Unvisited]))
 readPackageData pkgName maybeName filePath =
   do  sourceCode <- liftIO (File.readStringUtf8 filePath)
 
@@ -209,7 +211,7 @@ readPackageData pkgName maybeName filePath =
       checkName filePath name maybeName
 
       let deps =
-            if pkgName == TMP.core
+            if pkgName == Pkg.coreName
               then rawDeps
               else Module.defaultImports ++ rawDeps
 
@@ -221,7 +223,7 @@ readPackageData pkgName maybeName filePath =
         )
 
 
-checkName :: FilePath -> Module.Name -> Maybe Module.Name -> BM.Task ()
+checkName :: FilePath -> Module.Raw -> Maybe Module.Raw -> BM.Task ()
 checkName path nameFromSource maybeName =
   case maybeName of
     Just nameFromPath | nameFromSource /= nameFromPath ->
@@ -238,7 +240,7 @@ checkName path nameFromSource maybeName =
 readAvailableForeignModules
     :: Desc.Description
     -> Solution.Solution
-    -> BM.Task (Map.Map Module.Name [(Pkg.Name, Pkg.Version)])
+    -> BM.Task (Map.Map Module.Raw [(Pkg.Name, Pkg.Version)])
 readAvailableForeignModules desc solution =
   do  visiblePackages <- allVisible desc solution
       rawLocations <- mapM exposedModules visiblePackages
@@ -267,7 +269,7 @@ allVisible desc solution =
 
 exposedModules
     :: (Pkg.Name, Pkg.Version)
-    -> BM.Task (Map.Map Module.Name [(Pkg.Name, Pkg.Version)])
+    -> BM.Task (Map.Map Module.Raw [(Pkg.Name, Pkg.Version)])
 exposedModules packageID@(pkgName, version) =
     within (Path.package pkgName version) $ do
         description <- withExceptT BM.PackageProblem (Desc.read Path.description)

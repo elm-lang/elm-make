@@ -127,17 +127,17 @@ data Error
     | Cycle [TMP.CanonicalModule]
     | PackageProblem String
     | MissingPackage Pkg.Name
-    | ModuleNotFound Module.Name (Maybe Module.Name)
+    | ModuleNotFound Module.Raw (Maybe Module.Raw)
     | ModuleDuplicates
-        { _name :: Module.Name
-        , _parent :: Maybe Module.Name
+        { _name :: Module.Raw
+        , _parent :: Maybe Module.Raw
         , _local :: [FilePath]
         , _foreign :: [Pkg.Name]
         }
     | ModuleName
         { _path :: FilePath
-        , _expectedName :: Module.Name
-        , _actualName :: Module.Name
+        , _expectedName :: Module.Raw
+        , _actualName :: Module.Raw
         }
 
 
@@ -207,7 +207,7 @@ printError err =
           ++ "Which is it?"
 
 
-toContext :: Maybe Module.Name -> String
+toContext :: Maybe Module.Raw -> String
 toContext maybeParent =
   case maybeParent of
     Nothing ->

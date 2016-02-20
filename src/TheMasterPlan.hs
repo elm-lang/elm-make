@@ -16,17 +16,17 @@ import qualified Elm.Package as Pkg
 
 data CanonicalModule = CanonicalModule
     { package :: Package
-    , name :: Module.Name
+    , name :: Module.Raw
     }
     deriving (Eq, Ord)
 
 
+simplifyModuleName :: CanonicalModule -> Module.Canonical
+simplifyModuleName (CanonicalModule (pkg,_) name) =
+    Module.Canonical pkg name
+
+
 type Package = (Pkg.Name, Pkg.Version)
-
-
-core :: Pkg.Name
-core =
-    Pkg.Name "elm-lang" "core"
 
 
 -- CRAWL AN INDIVIDUAL PACKGE
@@ -42,15 +42,15 @@ file or package description.
 
 -}
 data PackageGraph = PackageGraph
-    { packageData :: Map.Map Module.Name PackageData
-    , packageNatives :: Map.Map Module.Name FilePath
-    , packageForeignDependencies :: Map.Map Module.Name Package
+    { packageData :: Map.Map Module.Raw PackageData
+    , packageNatives :: Map.Map Module.Raw FilePath
+    , packageForeignDependencies :: Map.Map Module.Raw Package
     }
 
 
 data PackageData = PackageData
     { packagePath :: FilePath
-    , packageDepenencies :: [Module.Name]
+    , packageDepenencies :: [Module.Raw]
     }
 
 
