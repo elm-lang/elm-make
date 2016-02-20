@@ -150,7 +150,7 @@ html generatedJavaScript moduleName =
 footer :: [TMP.CanonicalModule] -> Text.Text
 footer rootModules =
   Text.pack $ unlines $
-    "var Elm = Elm || { __modules__: {} };"
+    "Elm = Elm || { __modules__: {} };"
     : map export rootModules
     ++ ["}());"]
 
@@ -176,7 +176,8 @@ export versionedName =
 
 
 header :: Text.Text
-header = [r|(function() {
+header = [r|var Elm;
+(function() {
 'use strict';
 
 function F2(fun)
