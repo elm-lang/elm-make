@@ -4,6 +4,7 @@ module Pipeline.Generate where
 
 import Control.Monad.Except (forM_, liftIO)
 import qualified Data.Graph as Graph
+import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import qualified Data.Set as Set
@@ -141,7 +142,7 @@ html generatedJavaScript moduleName =
             Blaze.preEscapedToMarkup generatedJavaScript
       H.body $ do
         H.script ! A.type_ "text/javascript" $
-            Blaze.preEscapedToMarkup ("Elm.fullscreen(Elm." ++ Module.nameToString moduleName ++ ")")
+            Blaze.preEscapedToMarkup ("Elm." ++ Module.nameToString moduleName ++ ".fullscreen()")
 
 
 -- FOOTER
@@ -150,33 +151,53 @@ html generatedJavaScript moduleName =
 footer :: [TMP.CanonicalModule] -> Text.Text
 footer rootModules =
   Text.pack $ unlines $
-    "Elm = Elm || { __modules__: {} };"
-    : map export rootModules
+    map export (List.sort (map TMP.simplifyModuleName rootModules))
     ++ ["}());"]
 
 
-export :: TMP.CanonicalModule -> String
-export versionedName =
+export :: Module.Canonical -> String
+export canonicalName@(Module.Canonical _ moduleName) =
   let
-    canonicalName@(Module.Canonical _ moduleName) =
-      TMP.simplifyModuleName versionedName
-
-    userName =
-      Module.nameToString moduleName
-
     jsName =
-      Module.canonicalNameToJS canonicalName
+      Module.qualifiedVar canonicalName "main"
   in
-    "Elm.__modules__['" ++ userName ++ "'] = " ++
-    "typeof " ++ jsName ++ " === 'undefined' ? null : " ++ jsName ++ ";"
+    setup moduleName
+    ++ "_elm_lang$core$Native_Platform.addPublicModule(" ++ objectFor moduleName
+    ++ ", '" ++ Module.nameToString moduleName
+    ++ "', typeof " ++ jsName ++ " === 'undefined' ? null : " ++ jsName ++ ");"
 
+
+setup :: [String] -> String
+setup moduleName =
+  let
+    create path =
+      let
+        jsPath =
+          objectFor path
+      in
+        jsPath ++ " = " ++ jsPath ++ " || {};"
+
+    paths =
+      tail (List.inits moduleName)
+  in
+    unlines (map create paths)
+
+
+objectFor :: Module.Raw -> String
+objectFor names =
+  let
+    brackets :: String -> String
+    brackets name =
+      "['" ++ name ++ "']"
+  in
+    "Elm" ++ concatMap brackets names
 
 
 -- HEADER
 
 
 header :: Text.Text
-header = [r|var Elm;
+header = [r|var Elm = Elm || {};
 (function() {
 'use strict';
 
