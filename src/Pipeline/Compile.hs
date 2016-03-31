@@ -6,6 +6,7 @@ import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import qualified Data.Set as Set
+import qualified Data.Text.Lazy.IO as LazyTextIO
 import qualified Elm.Compiler as Compiler
 import qualified Elm.Compiler.Module as Module
 import qualified Elm.Docs as Docs
@@ -147,7 +148,7 @@ buildManager env state =
             do  -- Write build artifacts to disk
                 let cache = cachePath env
                 File.writeBinary (Path.toInterface cache modul) interface
-                writeFile (Path.toObjectFile cache modul) js
+                LazyTextIO.writeFile (Path.toObjectFile cache modul) js
 
                 -- Report results to user
                 Chan.writeChan (reportChan env) (Report.Complete modul localizer path source warnings)
