@@ -6,6 +6,7 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import System.Exit (exitFailure)
 import GHC.Conc (getNumProcessors, setNumCapabilities)
+import GHC.IO.Encoding (setLocaleEncoding, utf8)
 
 import qualified BuildManager as BM
 import qualified Flags
@@ -18,7 +19,9 @@ import TheMasterPlan (ProjectGraph(..), ProjectData(..))
 
 main :: IO ()
 main =
-  do  setNumCapabilities =<< getNumProcessors
+  do  setLocaleEncoding utf8
+
+      setNumCapabilities =<< getNumProcessors
 
       result <- BM.run make
       case result of
