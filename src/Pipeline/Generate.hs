@@ -213,10 +213,9 @@ if (typeof module === "object")
 }
 
 var globalElm = this['Elm'];
-
 if (typeof globalElm === "undefined")
 {
-  globalElm = Elm;
+  this['Elm'] = Elm;
   return;
 }
 
