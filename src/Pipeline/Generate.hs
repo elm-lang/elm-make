@@ -150,9 +150,14 @@ html generatedJavaScript moduleName =
 
 footer :: [TMP.CanonicalModule] -> Text.Text
 footer rootModules =
-  Text.pack $ unlines $
-    map export (List.sort (map TMP.simplifyModuleName rootModules))
-    ++ ["}());"]
+  let
+    exportChunks =
+      map export (List.sort (map TMP.simplifyModuleName rootModules))
+  in
+    Text.pack $
+      "var Elm = {};\n"
+      ++ unlines exportChunks
+      ++ footerClose
 
 
 export :: Module.Canonical -> String
@@ -193,11 +198,47 @@ objectFor names =
     "Elm" ++ concatMap brackets names
 
 
+footerClose :: String
+footerClose = [r|
+if (typeof define === "function" && define['amd'])
+{
+  define([], function() { return Elm; });
+  return;
+}
+
+if (typeof module === "object")
+{
+  module['exports'] = Elm;
+  return;
+}
+
+var globalElm = this['Elm'];
+
+if (typeof globalElm === "undefined")
+{
+  globalElm = Elm;
+  return;
+}
+
+for (var publicModule in Elm)
+{
+  if (publicModule in globalElm)
+  {
+    throw new Error('There are two Elm modules called `' + publicModule + '` on this page! Rename one of them.');
+  }
+  globalElm[publicModule] = Elm[publicModule];
+}
+
+}).call(this);
+|]
+
+
+
 -- HEADER
 
 
 header :: Text.Text
-header = [r|var Elm = Elm || {};
+header = [r|
 (function() {
 'use strict';
 
