@@ -17,14 +17,18 @@ import qualified BuildManager as BM
 import qualified Report
 
 
+
 -- TO CONFIG
+
 
 toConfig :: BM.Task BM.Config
 toConfig =
   liftIO parse
 
 
+
 -- PARSE ARGUMENTS
+
 
 parse :: IO BM.Config
 parse =
@@ -39,7 +43,9 @@ parse =
         Opt.info (Opt.helper <*> flags) helpInfo
 
 
+
 -- COMMANDS
+
 
 flags :: Opt.Parser BM.Config
 flags =
@@ -63,7 +69,9 @@ flags =
         ]
 
 
+
 -- HELP
+
 
 helpInfo :: Opt.InfoMod BM.Config
 helpInfo =
