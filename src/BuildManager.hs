@@ -17,7 +17,9 @@ import qualified Report
 import qualified TheMasterPlan as TMP
 
 
+
 -- CONFIGURATION
+
 
 data Config = Config
     { _artifactDirectory :: FilePath
@@ -49,7 +51,9 @@ artifactDirectory =
     Path.stuffDirectory </> "build-artifacts" </> (Pkg.versionToString Compiler.version)
 
 
+
 -- RUN A BUILD
+
 
 type Task a =
   ExceptT Error (StateT [Phase] IO) a
@@ -71,7 +75,9 @@ run task =
 
 
 
+
 -- TIMELINE
+
 
 data Timeline = Timeline
     { _start :: Time.POSIXTime
@@ -119,7 +125,9 @@ phaseToString overallDuration indent (Phase tag start subphases end) =
     ++ concatMap (phaseToString duration (indent + 1)) subphases
 
 
+
 -- ERRORS
+
 
 data Error
     = CompilerErrors FilePath String [Compiler.Error]

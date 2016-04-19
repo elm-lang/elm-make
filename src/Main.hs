@@ -20,7 +20,6 @@ import TheMasterPlan (ProjectGraph(..), ProjectData(..))
 main :: IO ()
 main =
   do  setLocaleEncoding utf8
-
       setNumCapabilities =<< getNumProcessors
 
       result <- BM.run make
