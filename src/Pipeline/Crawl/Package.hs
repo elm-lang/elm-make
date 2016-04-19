@@ -40,12 +40,11 @@ initEnv root desc solution =
 
 
 dfsFromFiles
-    :: FilePath
-    -> Solution.Solution
-    -> Desc.Description
-    -> [FilePath]
-    -> BM.Task ([Module.Raw], PackageGraph)
-
+  :: FilePath
+  -> Solution.Solution
+  -> Desc.Description
+  -> [FilePath]
+  -> BM.Task ([Module.Raw], PackageGraph)
 dfsFromFiles root solution desc filePaths =
   do  env <- initEnv root desc solution
 
@@ -63,10 +62,10 @@ dfsFromFiles root solution desc filePaths =
 
 
 dfsFromExposedModules
-    :: FilePath
-    -> Solution.Solution
-    -> Desc.Description
-    -> BM.Task PackageGraph
+  :: FilePath
+  -> Solution.Solution
+  -> Desc.Description
+  -> BM.Task PackageGraph
 dfsFromExposedModules root solution desc =
   do  env <- initEnv root desc solution
       let unvisited = map (Unvisited Nothing) (Desc.exposed desc)
@@ -205,6 +204,7 @@ readPackageData pkgName maybeName filePath =
           case Compiler.parseDependencies sourceCode of
             Right result ->
                 return result
+
             Left msgs ->
                 throwError (BM.CompilerErrors filePath sourceCode msgs)
 
