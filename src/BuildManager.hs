@@ -29,6 +29,7 @@ data Config = Config
     , _reportType :: Report.Type
     , _warn :: Bool
     , _docs :: Maybe FilePath
+    , _permissions :: Permissions
     }
 
 
@@ -49,6 +50,12 @@ outputFilePath config =
 artifactDirectory :: FilePath
 artifactDirectory =
     Path.stuffDirectory </> "build-artifacts" </> (Pkg.versionToString Compiler.version)
+
+
+data Permissions
+  = PortsAndEffects
+  | Effects
+  | None
 
 
 
@@ -147,6 +154,9 @@ data Error
         , _expectedName :: Module.Raw
         , _actualName :: Module.Raw
         }
+    | UnpublishablePorts FilePath Module.Raw
+    | UnpublishableEffects FilePath Module.Raw
+
 
 
 printError :: Error -> IO ()
@@ -213,6 +223,58 @@ printError err =
           ++ "    According to the source code it should be " ++ Module.nameToString nameFromSource ++ "\n"
           ++ "\n"
           ++ "Which is it?"
+
+    UnpublishablePorts path name ->
+        hPutStrLn stderr $ List.intercalate "\n" $
+          [ "You are trying to publish `port module " ++ Module.nameToString name ++ "` which"
+          , "is defined in: " ++ path
+          , ""
+          , "Modules with ports cannot be published. Imagine installing a new package, only"
+          , "to find that it silently does not work at all unless you hook up some poorly"
+          , "documented ports with specific names. And these port names may overlap with"
+          , "names you are already using in your project! Suddenly it became much trickier"
+          , "to add a dependency."
+          , ""
+          , "So basically, it would suck for everyone if any packages declared ports."
+          , ""
+          , "If you think the Elm community really need this in the package ecosystem for"
+          , "some reason, ask around on the mailing list or Slack channel listed at"
+          , "<http://elm-lang.org/community>. Folks are friendly and helpful, and there is"
+          , "likely some other way!"
+          ]
+
+    UnpublishableEffects path name ->
+        hPutStrLn stderr $ List.intercalate "\n" $
+          [ "Your package includes `effect module " ++ Module.nameToString name ++ "` which"
+          , "is defined in: " ++ path
+          , ""
+          , "Effect modules in the package ecosystem define \"The Elm Platform\", providing"
+          , "nice APIs for things like web sockets, geolocation, and page visibility."
+          , ""
+          , "The only intent of effect modules is to help Elm communicate with EXTERNAL"
+          , "services. If you want to write a wrapper around GraphQL or Phoenix Channels,"
+          , "you are using effect modules as intended. If you are doing any other kind of"
+          , "thing, it may be subverting \"The Elm Platform\" in relatively serious ways."
+          , ""
+          , "So to publish your own effect module, you need to go through a review process"
+          , "to make sure these facilities are not being abused. Think of it as contributing"
+          , "to the compiler or core libraries. Obviously someone is going to review that PR"
+          , "in those cases. Same thing here."
+          , ""
+          , "To make this as smooth as possible, let folks on the elm-dev mailing list know"
+          , "what you are up to as soon as possible."
+          , ""
+          , "    <https://groups.google.com/forum/#!forum/elm-dev>"
+          , ""
+          , "It is impossible to collaborate with people if you do not communicate. So come"
+          , "and talk through your goals. See if it aligns with Elm overall or if there is"
+          , "some nicer way. When things get to a point where you want to publish something,"
+          , "open an issue in the following repo:"
+          , ""
+          , "    <https://github.com/elm-lang/package.elm-lang.org/issues>"
+          , ""
+          , "With a title like \"Effect manager review for _____\"."
+          ]
 
 
 toContext :: Maybe Module.Raw -> String

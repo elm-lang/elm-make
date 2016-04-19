@@ -1,7 +1,7 @@
 {-# OPTIONS_GHC -Wall #-}
 module Flags where
 
-import Control.Applicative (many, optional)
+import Control.Applicative ((<|>), many, optional)
 import Control.Monad.Except (liftIO)
 import qualified Data.List as List
 import Data.Monoid ((<>))
@@ -56,6 +56,7 @@ flags =
       <*> reportFlag
       <*> warnFlag
       <*> optional docs
+      <*> capabilities
   where
     files =
       many (Opt.strArgument ( Opt.metavar "FILES..." ))
@@ -66,6 +67,13 @@ flags =
         [ Opt.long "docs"
         , Opt.metavar "FILE"
         , Opt.help "Write documentation to FILE as JSON."
+        ]
+
+    capabilities =
+      foldl1 (<|>)
+        [ Opt.switch (Opt.long "prepublish") *> pure BM.None
+        , Opt.switch (Opt.long "prepublish-core") *> pure BM.Effects
+        , pure BM.PortsAndEffects
         ]
 
 
