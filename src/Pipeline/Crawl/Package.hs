@@ -25,14 +25,22 @@ import TheMasterPlan ( PackageGraph(..), PackageData(..) )
 data Env = Env
     { _sourceDirs :: [FilePath]
     , _availableForeignModules :: Map.Map Module.Raw [(Pkg.Name, Pkg.Version)]
+    , _permissions :: BM.Permissions
+    , _allowNatives :: Bool
+    , _packageName :: Pkg.Name
     }
 
 
-initEnv :: FilePath -> Desc.Description -> Solution.Solution -> BM.Task Env
-initEnv root desc solution =
+initEnv :: FilePath -> Desc.Description -> Solution.Solution -> BM.Permissions -> BM.Task Env
+initEnv root desc solution permissions =
   do  availableForeignModules <- readAvailableForeignModules desc solution
-      let sourceDirs = map (root </>) (Desc.sourceDirs desc)
-      return (Env sourceDirs availableForeignModules)
+      return $
+        Env
+          (map (root </>) (Desc.sourceDirs desc))
+          availableForeignModules
+          permissions
+          (Desc.natives desc)
+          (Desc.name desc)
 
 
 
@@ -43,20 +51,19 @@ dfsFromFiles
   :: FilePath
   -> Solution.Solution
   -> Desc.Description
+  -> BM.Permissions
   -> [FilePath]
   -> BM.Task ([Module.Raw], PackageGraph)
-dfsFromFiles root solution desc filePaths =
-  do  env <- initEnv root desc solution
+dfsFromFiles root solution desc permissions filePaths =
+  do  env <- initEnv root desc solution permissions
 
-      let pkgName = Desc.name desc
-      info <- mapM (readPackageData pkgName Nothing) filePaths
+      info <- mapM (readPackageData env Nothing) filePaths
       let names = map fst info
       let unvisited = concatMap (snd . snd) info
       let pkgData = Map.fromList (map (second fst) info)
       let initialGraph = PackageGraph pkgData Map.empty Map.empty
 
-      summary <-
-          dfs (Desc.natives desc) pkgName unvisited env initialGraph
+      summary <- dfs env unvisited initialGraph
 
       return (names, summary)
 
@@ -65,13 +72,13 @@ dfsFromExposedModules
   :: FilePath
   -> Solution.Solution
   -> Desc.Description
+  -> BM.Permissions
   -> BM.Task PackageGraph
-dfsFromExposedModules root solution desc =
-  do  env <- initEnv root desc solution
+dfsFromExposedModules root solution desc permissions =
+  do  env <- initEnv root desc solution permissions
       let unvisited = map (Unvisited Nothing) (Desc.exposed desc)
       let summary = PackageGraph Map.empty Map.empty Map.empty
-      dfs (Desc.natives desc) (Desc.name desc) unvisited env summary
-
+      dfs env unvisited summary
 
 
 
@@ -85,43 +92,43 @@ data Unvisited =
     }
 
 
-dfs :: Bool -> Pkg.Name -> [Unvisited] -> Env -> PackageGraph -> BM.Task PackageGraph
-dfs allowNatives pkgName unvisited env summary =
+dfs :: Env -> [Unvisited] -> PackageGraph -> BM.Task PackageGraph
+dfs env unvisited summary =
   case unvisited of
     [] ->
       return summary
 
     next@(Unvisited _ name) : rest ->
       if Map.member name (packageData summary) then
-        dfs allowNatives pkgName rest env summary
+        dfs env rest summary
 
       else
-        dfsHelp allowNatives pkgName next rest env summary
+        dfsHelp env next rest summary
 
 
-dfsHelp :: Bool -> Pkg.Name -> Unvisited -> [Unvisited] -> Env -> PackageGraph -> BM.Task PackageGraph
-dfsHelp allowNatives pkgName (Unvisited maybeParent name) unvisited env summary =
+dfsHelp :: Env -> Unvisited -> [Unvisited] -> PackageGraph -> BM.Task PackageGraph
+dfsHelp env (Unvisited maybeParent name) unvisited summary =
   do  -- find all paths that match the unvisited module name
       filePaths <-
-        find allowNatives name (_sourceDirs env)
+        find (_allowNatives env) name (_sourceDirs env)
 
       -- see if we found a unique path for the name
       case (filePaths, Map.lookup name (_availableForeignModules env)) of
         ([Elm filePath], Nothing) ->
             do  (statedName, (pkgData, newUnvisited)) <-
-                    readPackageData pkgName (Just name) filePath
+                    readPackageData env (Just name) filePath
 
-                dfs allowNatives pkgName (newUnvisited ++ unvisited) env $ summary {
+                dfs env (newUnvisited ++ unvisited) $ summary {
                     packageData = Map.insert statedName pkgData (packageData summary)
                 }
 
         ([JS filePath], Nothing) ->
-            dfs allowNatives pkgName unvisited env $ summary {
+            dfs env unvisited $ summary {
                 packageNatives = Map.insert name filePath (packageNatives summary)
             }
 
         ([], Just [pkg]) ->
-            dfs allowNatives pkgName unvisited env $ summary {
+            dfs env unvisited $ summary {
                 packageForeignDependencies =
                     Map.insert name pkg (packageForeignDependencies summary)
             }
@@ -193,14 +200,14 @@ findHelp allowNatives locations moduleName (dir:srcDirs) =
 
 
 readPackageData
-    :: Pkg.Name
-    -> Maybe Module.Raw
-    -> FilePath
-    -> BM.Task (Module.Raw, (PackageData, [Unvisited]))
-readPackageData pkgName maybeName filePath =
+  :: Env
+  -> Maybe Module.Raw
+  -> FilePath
+  -> BM.Task (Module.Raw, (PackageData, [Unvisited]))
+readPackageData env maybeName filePath =
   do  sourceCode <- liftIO (File.readStringUtf8 filePath)
 
-      (name, rawDeps) <-
+      (tag, name, rawDeps) <-
           case Compiler.parseDependencies sourceCode of
             Right result ->
                 return result
@@ -209,9 +216,10 @@ readPackageData pkgName maybeName filePath =
                 throwError (BM.CompilerErrors filePath sourceCode msgs)
 
       checkName filePath name maybeName
+      checkTag filePath name (_permissions env) tag
 
       let deps =
-            if pkgName == Pkg.core
+            if _packageName env == Pkg.core
               then rawDeps
               else Module.defaultImports ++ rawDeps
 
@@ -230,6 +238,22 @@ checkName path nameFromSource maybeName =
       throwError (BM.ModuleName path nameFromPath nameFromSource)
 
     _ ->
+      return ()
+
+
+checkTag :: FilePath -> Module.Raw -> BM.Permissions -> Compiler.Tag -> BM.Task ()
+checkTag filePath name permissions tag =
+  case (permissions, tag) of
+    (BM.PortsAndEffects, _) ->
+      return ()
+
+    (_, Compiler.Port) ->
+      throwError (BM.UnpublishablePorts filePath name)
+
+    (BM.None, Compiler.Effect)  ->
+      throwError (BM.UnpublishableEffects filePath name)
+
+    (_, _) ->
       return ()
 
 

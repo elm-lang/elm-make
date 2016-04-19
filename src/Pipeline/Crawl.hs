@@ -41,13 +41,15 @@ crawl config =
 
       desc <- withExceptT BM.PackageProblem (Desc.read Path.description)
 
-      (moduleForGeneration, packageGraph) <-
-          case BM._files config of
-            [] ->
-                (,) [] <$> CrawlPackage.dfsFromExposedModules "." solution desc
+      let permits = BM._permissions config
 
-            filePaths ->
-                CrawlPackage.dfsFromFiles "." solution desc filePaths
+      (moduleForGeneration, packageGraph) <-
+        case BM._files config of
+          [] ->
+            (,) [] <$> CrawlPackage.dfsFromExposedModules "." solution desc permits
+
+          filePaths ->
+            CrawlPackage.dfsFromFiles "." solution desc permits filePaths
 
       let thisPackage =
             (Desc.name desc, Desc.version desc)
@@ -88,7 +90,7 @@ crawlDependency config solution pkg@(name,version) =
     BM.phase (Pkg.toString name) $
       File.readBinary cache `catchError` \_ -> do
           desc <- withExceptT BM.PackageProblem (Desc.read (root </> Path.description))
-          packageGraph <- CrawlPackage.dfsFromExposedModules root solution desc
+          packageGraph <- CrawlPackage.dfsFromExposedModules root solution desc BM.Effects
           let projectGraph = canonicalizePackageGraph (name,version) packageGraph
           liftIO (File.writeBinary cache projectGraph)
           return projectGraph
