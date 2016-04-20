@@ -78,10 +78,10 @@ getSolution autoYes =
 
 
 crawlDependency
-    :: BM.Config
-    -> Solution.Solution
-    -> Package
-    -> BM.Task (ProjectGraph Location)
+  :: BM.Config
+  -> Solution.Solution
+  -> Package
+  -> BM.Task (ProjectGraph Location)
 crawlDependency config solution pkg@(name,version) =
   let
     root = Path.package name version
@@ -96,10 +96,7 @@ crawlDependency config solution pkg@(name,version) =
           return projectGraph
 
 
-canonicalizePackageGraph
-    :: Package
-    -> PackageGraph
-    -> ProjectGraph Location
+canonicalizePackageGraph :: Package -> PackageGraph -> ProjectGraph Location
 canonicalizePackageGraph package (PackageGraph pkgData natives foreignDependencies) =
     ProjectGraph
     { projectData =
@@ -115,10 +112,10 @@ canonicalizePackageGraph package (PackageGraph pkgData natives foreignDependenci
 
 
 canonicalizePackageData
-    :: Package
-    -> Map.Map Module.Raw Package
-    -> PackageData
-    -> ProjectData Location
+  :: Package
+  -> Map.Map Module.Raw Package
+  -> PackageData
+  -> ProjectData Location
 canonicalizePackageData package foreignDependencies (PackageData filePath deps) =
     ProjectData {
         projectLocation = Location filePath package,
