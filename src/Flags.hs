@@ -1,7 +1,7 @@
 {-# OPTIONS_GHC -Wall #-}
 module Flags where
 
-import Control.Applicative ((<|>), many, optional)
+import Control.Applicative (many, optional)
 import Control.Monad.Except (liftIO)
 import qualified Data.List as List
 import Data.Monoid ((<>))
@@ -70,11 +70,21 @@ flags =
         ]
 
     capabilities =
-      foldl1 (<|>)
-        [ Opt.switch (Opt.long "prepublish") *> pure BM.None
-        , Opt.switch (Opt.long "prepublish-core") *> pure BM.Effects
-        , pure BM.PortsAndEffects
-        ]
+      setCapabilities
+        <$> Opt.switch (Opt.long "prepublish")
+        <*> Opt.switch (Opt.long "prepublish-core")
+
+
+setCapabilities :: Bool -> Bool -> BM.Permissions
+setCapabilities isNormal isCore =
+  if isCore then
+    BM.Effects
+
+  else if isNormal then
+    BM.None
+
+  else
+    BM.PortsAndEffects
 
 
 
