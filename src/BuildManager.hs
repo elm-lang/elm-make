@@ -291,20 +291,16 @@ drawCycle :: [TMP.CanonicalModule] -> String
 drawCycle modules =
   let
     topLine=
-        [ "  ┌─────┐"
-        , "  │     V"
-        ]
+        "  ┌─────┐"
 
     line (TMP.CanonicalModule _ name) =
-        [ "  │    " ++ Module.nameToString name ]
+        "  │    " ++ Module.nameToString name
 
     midLine =
-        [ "  │     │"
-        , "  │     V"
-        ]
+        "  │     ↓"
 
     bottomLine =
         "  └─────┘"
   in
-    unlines (topLine ++ List.intercalate midLine (map line modules) ++ [ bottomLine ])
+    unlines (topLine : List.intersperse midLine (map line modules) ++ [ bottomLine ])
 
