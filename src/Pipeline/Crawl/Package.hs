@@ -2,7 +2,7 @@
 module Pipeline.Crawl.Package where
 
 import Control.Arrow (second)
-import Control.Monad.Except (liftIO, throwError, withExceptT)
+import Control.Monad.Except (liftIO, throwError)
 import qualified Data.Map as Map
 import qualified Elm.Compiler as Compiler
 import qualified Elm.Compiler.Module as Module
@@ -296,12 +296,12 @@ exposedModules
     -> BM.Task (Map.Map Module.Raw [(Pkg.Name, Pkg.Version)])
 exposedModules packageID@(pkgName, version) =
     within (Path.package pkgName version) $ do
-        description <- withExceptT BM.PackageProblem (Desc.read Path.description)
+        description <- Desc.read BM.PackageProblem Path.description
         let exposed = Desc.exposed description
         return (foldr insert Map.empty exposed)
   where
     insert moduleName dict =
-        Map.insert moduleName [packageID] dict
+      Map.insert moduleName [packageID] dict
 
 
 within :: FilePath -> BM.Task a -> BM.Task a

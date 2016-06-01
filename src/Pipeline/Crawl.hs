@@ -39,7 +39,7 @@ crawl config =
 
       depGraphs <- mapM (crawlDependency config solution) (Map.toList solution)
 
-      desc <- withExceptT BM.PackageProblem (Desc.read Path.description)
+      desc <- (Desc.read BM.PackageProblem Path.description)
 
       let permits = BM._permissions config
 
@@ -70,11 +70,9 @@ crawl config =
 getSolution :: Bool -> BM.Task Solution.Solution
 getSolution autoYes =
   do  exists <- liftIO (doesFileExist Path.solvedDependencies)
-      withExceptT BM.PackageProblem $
-        if exists then
-          Solution.read Path.solvedDependencies
-        else
-          Initialize.solution autoYes
+      if exists
+        then Solution.read BM.PackageProblem Path.solvedDependencies
+        else withExceptT BM.PackageProblem (Initialize.solution autoYes)
 
 
 crawlDependency
@@ -89,7 +87,7 @@ crawlDependency config solution pkg@(name,version) =
   in
     BM.phase (Pkg.toString name) $
       File.readBinary cache `catchError` \_ -> do
-          desc <- withExceptT BM.PackageProblem (Desc.read (root </> Path.description))
+          desc <- Desc.read BM.PackageProblem (root </> Path.description)
           packageGraph <- CrawlPackage.dfsFromExposedModules root solution desc BM.Effects
           let projectGraph = canonicalizePackageGraph (name,version) packageGraph
           liftIO (File.writeBinary cache projectGraph)
