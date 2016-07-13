@@ -163,13 +163,17 @@ footer rootModules =
 export :: Module.Canonical -> String
 export canonicalName@(Module.Canonical _ moduleName) =
   let
-    jsName =
+    makeProgram =
       Module.qualifiedVar canonicalName "main"
+
+    object =
+      objectFor moduleName
+
+    name =
+      Module.nameToString moduleName
   in
     setup moduleName
-    ++ "_elm_lang$core$Native_Platform.addPublicModule(" ++ objectFor moduleName
-    ++ ", '" ++ Module.nameToString moduleName
-    ++ "', typeof " ++ jsName ++ " === 'undefined' ? null : " ++ jsName ++ ");"
+    ++ makeProgram ++ "(" ++ object ++ ", '" ++ name ++ "');"
 
 
 setup :: [String] -> String
