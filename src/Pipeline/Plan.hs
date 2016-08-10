@@ -1,9 +1,10 @@
 module Pipeline.Plan where
 
+import Control.Monad (foldM)
 import Control.Monad.Except (liftIO, throwError)
 import qualified Data.Graph as Graph
-import qualified Data.List as List
 import qualified Data.Set as Set
+import Data.Time.Clock (UTCTime)
 import Data.Map ((!))
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
@@ -23,22 +24,21 @@ import TheMasterPlan
 
 planBuild :: BM.Config -> Set.Set CanonicalModule -> ProjectGraph Location -> BM.Task BuildGraph
 planBuild config modulesToDocument (ProjectGraph projectData _projectNatives) =
-  do  enhancedData <- addInterfaces (BM._artifactDirectory config) projectData
-      filteredData <- filterStaleInterfaces modulesToDocument enhancedData
+  do  enhancedData <- Map.traverseWithKey (enhanceData (BM._artifactDirectory config)) projectData
+      filteredData <- loadCachedInterfaces modulesToDocument enhancedData
       return (toBuildGraph filteredData)
+
+
+type EnhancedGraph =
+  Map.Map CanonicalModule (ProjectData (Location, Maybe (FilePath, UTCTime)))
+
+
+type InterfacedGraph =
+  Map.Map CanonicalModule (ProjectData (Either Location Module.Interface))
 
 
 
 --- LOAD INTERFACES -- what has already been compiled?
-
-
-addInterfaces
-    :: FilePath
-    -> Map.Map CanonicalModule (ProjectData Location)
-    -> BM.Task (Map.Map CanonicalModule (ProjectData (Location, Maybe Module.Interface)))
-addInterfaces artifactRoot projectData =
-  do  enhancedData <- mapM (maybeLoadInterface artifactRoot) (Map.toList projectData)
-      return (Map.fromList enhancedData)
 
 
 -- TODO: if two modules in the same package have the same name, their interface
@@ -46,34 +46,37 @@ addInterfaces artifactRoot projectData =
 -- modules named Main. As a stopgap, we never load in the interface file for
 -- Main. The real fix may be to add a hash of the source code to the interface
 -- files.
-maybeLoadInterface
+enhanceData
     :: FilePath
-    -> (CanonicalModule, ProjectData Location)
-    -> BM.Task (CanonicalModule, ProjectData (Location, Maybe Module.Interface))
-maybeLoadInterface artifactRoot (moduleID, (ProjectData location deps)) =
-  do  let interfacePath = Path.toInterface artifactRoot moduleID
-      let sourcePath = Path.toSource location
-      fresh <- liftIO (isFresh sourcePath interfacePath)
+    -> CanonicalModule
+    -> ProjectData Location
+    -> BM.Task (ProjectData (Location, Maybe (FilePath, UTCTime)))
+enhanceData artifactRoot moduleID (ProjectData location deps) =
+  if isMain moduleID then
+    return $ ProjectData (location, Nothing) deps
 
-      maybeInterface <-
-          case fresh && not (isMain moduleID) of
-            False -> return Nothing
-            True ->
-              do  interface <- File.readBinary interfacePath
-                  return (Just interface)
-
-      return (moduleID, ProjectData (location, maybeInterface) deps)
+  else
+    do  let interfacePath = Path.toInterface artifactRoot moduleID
+        let sourcePath = Path.toSource location
+        interfaceInfo <- liftIO $ getFreshInterfaceInfo sourcePath interfacePath
+        return $ ProjectData (location, interfaceInfo) deps
 
 
-isFresh :: FilePath -> FilePath -> IO Bool
-isFresh sourcePath interfacePath =
+getFreshInterfaceInfo :: FilePath -> FilePath -> IO (Maybe (FilePath, UTCTime))
+getFreshInterfaceInfo sourcePath interfacePath =
   do  exists <- doesFileExist interfacePath
       case exists of
-        False -> return False
+        False ->
+          return Nothing
+
         True ->
           do  sourceTime <- getModificationTime sourcePath
               interfaceTime <- getModificationTime interfacePath
-              return (sourceTime <= interfaceTime)
+              return $
+                if sourceTime <= interfaceTime then
+                  Just (interfacePath, interfaceTime)
+                else
+                  Nothing
 
 
 isMain :: CanonicalModule -> Bool
@@ -85,53 +88,58 @@ isMain (CanonicalModule _ names) =
 -- FILTER STALE INTERFACES -- have files become stale due to other changes?
 
 
-filterStaleInterfaces
-    :: Set.Set CanonicalModule
-    -> Map.Map CanonicalModule (ProjectData (Location, Maybe Module.Interface))
-    -> BM.Task (Map.Map CanonicalModule (ProjectData (Either Location Module.Interface)))
-filterStaleInterfaces modulesToDocument summary =
+loadCachedInterfaces :: Set.Set CanonicalModule -> EnhancedGraph -> BM.Task InterfacedGraph
+loadCachedInterfaces modulesToDocument summary =
   do  sortedNames <- topologicalSort (Map.map projectDependencies summary)
-      return (List.foldl' (filterIfStale summary modulesToDocument) Map.empty sortedNames)
+      foldM (updateFromCache summary modulesToDocument) Map.empty sortedNames
 
 
-filterIfStale
-    :: Map.Map CanonicalModule (ProjectData (Location, Maybe Module.Interface))
+updateFromCache
+    :: EnhancedGraph
     -> Set.Set CanonicalModule
-    -> Map.Map CanonicalModule (ProjectData (Either Location Module.Interface))
+    -> InterfacedGraph
     -> CanonicalModule
-    -> Map.Map CanonicalModule (ProjectData (Either Location Module.Interface))
-filterIfStale enhancedGraph modulesToDocument filteredGraph moduleName =
-    Map.insert moduleName (ProjectData trueLocation deps) filteredGraph
+    -> BM.Task InterfacedGraph
+updateFromCache enhancedGraph modulesToDocument interfacedGraph moduleName =
+  do  trueLocation <- getTrueLocation
+      return $ Map.insert moduleName (ProjectData trueLocation deps) interfacedGraph
   where
-    (ProjectData (filePath, maybeInterface) deps) =
-        enhancedGraph ! moduleName
+    (ProjectData (location, maybeInterfaceInfo) deps) =
+      enhancedGraph ! moduleName
 
-    depsAreDone =
-      all (haveInterface filteredGraph) deps
+    getTrueLocation =
+      case maybeInterfaceInfo of
+        Nothing ->
+          return $ Left location
 
-    needsDocs =
-      Set.member moduleName modulesToDocument
+        Just (interfacePath, time) ->
+          let
+            depsAreCached = all (isCacheValid time enhancedGraph interfacedGraph) deps
+            needsDocs = Set.member moduleName modulesToDocument
+          in
+            if depsAreCached && not needsDocs then
+              Right <$> File.readBinary interfacePath
+            else
+              return $ Left location
 
-    trueLocation =
-        case maybeInterface of
-          Just interface
-            | depsAreDone && not needsDocs ->
-                Right interface
 
-          _ -> Left filePath
+isCacheValid :: UTCTime -> EnhancedGraph -> InterfacedGraph -> CanonicalModule -> Bool
+isCacheValid time enhancedGraph interfacedGraph possiblyNativeName =
+  case filterNativeDeps possiblyNativeName of
+    Nothing ->
+      True
 
+    Just name ->
+      let
+        getLoc (ProjectData loc _) =
+          loc
+      in
+        case ( getLoc (interfacedGraph ! name), getLoc (enhancedGraph ! name) ) of
+          ( Right _, (_, Just (_, depTime)) ) ->
+            depTime <= time
 
-haveInterface
-    :: Map.Map CanonicalModule (ProjectData (Either Location Module.Interface))
-    -> CanonicalModule
-    -> Bool
-haveInterface enhancedGraph rawName =
-    case filterNativeDeps rawName of
-      Nothing -> True
-      Just name ->
-          case Map.lookup name enhancedGraph of
-            Just (ProjectData (Right _) _) -> True
-            _ -> False
+          _ ->
+            False
 
 
 
@@ -139,7 +147,7 @@ haveInterface enhancedGraph rawName =
 
 
 toBuildGraph
-    :: Map.Map CanonicalModule (ProjectData (Either Location Module.Interface))
+    :: InterfacedGraph
     -> BuildGraph
 toBuildGraph summary =
     BuildGraph
