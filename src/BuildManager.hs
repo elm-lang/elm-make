@@ -27,6 +27,7 @@ data Config = Config
     , _output :: Output
     , _autoYes :: Bool
     , _reportType :: Report.Type
+    , _debug :: Bool
     , _warn :: Bool
     , _docs :: Maybe FilePath
     , _permissions :: Permissions

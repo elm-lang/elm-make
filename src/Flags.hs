@@ -54,6 +54,7 @@ flags =
       <*> output
       <*> yes
       <*> reportFlag
+      <*> debugFlag
       <*> warnFlag
       <*> optional docs
       <*> capabilities
@@ -127,6 +128,15 @@ yes =
         mconcat
         [ Opt.long "yes"
         , Opt.help "Reply 'yes' to all automated prompts."
+        ]
+
+
+debugFlag :: Opt.Parser Bool
+debugFlag =
+    Opt.switch $
+        mconcat
+        [ Opt.long "debug"
+        , Opt.help "Generate programs in debug mode."
         ]
 
 

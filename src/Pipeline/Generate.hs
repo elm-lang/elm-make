@@ -64,12 +64,14 @@ generate config dependencies natives rootModules =
       let outputFile = BM.outputFilePath config
       liftIO (createDirectoryIfMissing True (dropFileName outputFile))
 
+      let debugMode = BM._debug config
+
       case BM._output config of
         BM.Html outputFile ->
           liftIO $
             do  js <- mapM File.readTextUtf8 objectFiles
                 let (TMP.CanonicalModule _ moduleName) = head rootModules
-                let outputText = html (Text.concat (header : js ++ [footer rootModules])) moduleName
+                let outputText = html (Text.concat (header : js ++ [footer debugMode rootModules])) moduleName
                 LazyText.writeFile outputFile outputText
 
         BM.JS outputFile ->
@@ -78,7 +80,7 @@ generate config dependencies natives rootModules =
               do  Text.hPutStrLn handle header
                   forM_ objectFiles $ \jsFile ->
                       Text.hPutStrLn handle =<< File.readTextUtf8 jsFile
-                  Text.hPutStrLn handle (footer rootModules)
+                  Text.hPutStrLn handle (footer debugMode rootModules)
 
         BM.DevNull ->
           return ()
@@ -148,11 +150,11 @@ html generatedJavaScript moduleName =
 -- FOOTER
 
 
-footer :: [TMP.CanonicalModule] -> Text.Text
-footer rootModules =
+footer :: Bool -> [TMP.CanonicalModule] -> Text.Text
+footer debugMode rootModules =
   let
     exportChunks =
-      map export (List.sort (map TMP.simplifyModuleName rootModules))
+      map (export debugMode) (List.sort (map TMP.simplifyModuleName rootModules))
   in
     Text.pack $
       "var Elm = {};\n"
@@ -160,8 +162,8 @@ footer rootModules =
       ++ footerClose
 
 
-export :: Module.Canonical -> String
-export canonicalName@(Module.Canonical _ moduleName) =
+export :: Bool -> Module.Canonical -> String
+export debugMode canonicalName@(Module.Canonical _ moduleName) =
   let
     makeProgram =
       Module.qualifiedVar canonicalName "main"
@@ -171,9 +173,15 @@ export canonicalName@(Module.Canonical _ moduleName) =
 
     name =
       Module.nameToString moduleName
+
+    debugArg =
+      if debugMode then
+        ", true"
+      else
+        ""
   in
     setup moduleName
-    ++ makeProgram ++ "(" ++ object ++ ", '" ++ name ++ "');"
+    ++ makeProgram ++ "(" ++ object ++ ", '" ++ name ++ "'" ++ debugArg ++ ");"
 
 
 setup :: [String] -> String
