@@ -49,7 +49,7 @@ make =
       buildSummary <-
           BM.phase "Plan Build" (Plan.planBuild config modulesToDocument projectSummary)
 
-      docs <-
+      (interfaces, docs) <-
         BM.phase "Compile" $ liftIO $
           Compile.build
             config
@@ -65,7 +65,7 @@ make =
       BM.phase "Generate Code" $
         Generate.generate
           config
+          interfaces
           dependencies
           (projectNatives projectSummary)
           moduleForGeneration
-

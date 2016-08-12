@@ -27,7 +27,7 @@ data Env =
     { numTasks :: Int
     , resultChan :: Chan.Chan Result
     , reportChan :: Chan.Chan Report.Message
-    , docsChan :: Chan.Chan [Docs.Documentation]
+    , doneChan :: Chan.Chan (Interfaces, [Docs.Documentation])
     , dependencies :: Map.Map CanonicalModule [CanonicalModule]
     , reverseDependencies :: Map.Map CanonicalModule [CanonicalModule]
     , cachePath :: FilePath
@@ -40,9 +40,13 @@ data State =
   State
     { numActiveThreads :: Int
     , blockedModules :: Map.Map CanonicalModule BuildData
-    , completedInterfaces :: Map.Map CanonicalModule Module.Interface
+    , completedInterfaces :: Interfaces
     , documentation :: [Docs.Documentation]
     }
+
+
+type Interfaces =
+  Map.Map CanonicalModule Module.Interface
 
 
 
@@ -59,12 +63,12 @@ initEnv
 initEnv cachePath exposedModules modulesForGeneration dependencies (BuildGraph blocked _completed) =
   do  resultChan <- Chan.newChan
       reportChan <- Chan.newChan
-      docsChan <- Chan.newChan
+      doneChan <- Chan.newChan
       return $ Env
         { numTasks = Map.size blocked
         , resultChan = resultChan
         , reportChan = reportChan
-        , docsChan = docsChan
+        , doneChan = doneChan
         , dependencies = dependencies
         , reverseDependencies = reverseGraph dependencies
         , cachePath = cachePath
@@ -123,12 +127,12 @@ build
     -> [CanonicalModule]
     -> Map.Map CanonicalModule [CanonicalModule]
     -> BuildGraph
-    -> IO [Docs.Documentation]
+    -> IO (Interfaces, [Docs.Documentation])
 build config rootPkg exposedModules modulesForGeneration dependencies summary =
   do  env <- initEnv (BM._artifactDirectory config) exposedModules modulesForGeneration dependencies summary
       forkIO (buildManager env =<< initState env summary)
       Report.thread (BM._reportType config) (BM._warn config) (reportChan env) rootPkg (numTasks env)
-      Chan.readChan (docsChan env)
+      Chan.readChan (doneChan env)
 
 
 buildManager :: Env -> State -> IO ()
@@ -136,7 +140,7 @@ buildManager env state =
   if numActiveThreads state == 0 then
 
     do  Chan.writeChan (reportChan env) Report.Close
-        Chan.writeChan (docsChan env) (documentation state)
+        Chan.writeChan (doneChan env) (completedInterfaces state, documentation state)
 
   else
 
@@ -229,11 +233,7 @@ updateBlockedModules modul blockedModules potentiallyFreedModule =
 
 -- UPDATE - BUILD SOME MODULES
 
-buildModule
-    :: Env
-    -> Map.Map CanonicalModule Module.Interface
-    -> (CanonicalModule, Location)
-    -> IO ()
+buildModule :: Env -> Interfaces -> (CanonicalModule, Location) -> IO ()
 buildModule env interfaces (modul, location) =
   let
     packageName = fst (TMP.package modul)

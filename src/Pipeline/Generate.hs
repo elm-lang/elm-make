@@ -3,6 +3,7 @@
 module Pipeline.Generate where
 
 import Control.Monad.Except (forM_, liftIO)
+import qualified Data.Aeson as Json
 import qualified Data.Graph as Graph
 import qualified Data.List as List
 import qualified Data.Map as Map
@@ -48,15 +49,16 @@ docs docsList path =
 
 generate
     :: BM.Config
+    -> Map.Map TMP.CanonicalModule Module.Interface
     -> Map.Map TMP.CanonicalModule [TMP.CanonicalModule]
     -> Map.Map TMP.CanonicalModule TMP.Location
     -> [TMP.CanonicalModule]
     -> BM.Task ()
 
-generate _config _dependencies _natives [] =
+generate _config _interfaces _dependencies _natives [] =
   return ()
 
-generate config dependencies natives rootModules =
+generate config interfaces dependencies natives rootModules =
   do  let objectFiles =
             setupNodes (BM._artifactDirectory config) dependencies natives
               |> getReachableObjectFiles rootModules
@@ -64,14 +66,14 @@ generate config dependencies natives rootModules =
       let outputFile = BM.outputFilePath config
       liftIO (createDirectoryIfMissing True (dropFileName outputFile))
 
-      let debugMode = BM._debug config
+      let footer = createFooter (BM._debug config) interfaces rootModules
 
       case BM._output config of
         BM.Html outputFile ->
           liftIO $
             do  js <- mapM File.readTextUtf8 objectFiles
                 let (TMP.CanonicalModule _ moduleName) = head rootModules
-                let outputText = html (Text.concat (header : js ++ [footer debugMode rootModules])) moduleName
+                let outputText = html (Text.concat (header : js ++ [footer])) moduleName
                 LazyText.writeFile outputFile outputText
 
         BM.JS outputFile ->
@@ -80,7 +82,7 @@ generate config dependencies natives rootModules =
               do  Text.hPutStrLn handle header
                   forM_ objectFiles $ \jsFile ->
                       Text.hPutStrLn handle =<< File.readTextUtf8 jsFile
-                  Text.hPutStrLn handle (footer debugMode rootModules)
+                  Text.hPutStrLn handle footer
 
         BM.DevNull ->
           return ()
@@ -150,11 +152,20 @@ html generatedJavaScript moduleName =
 -- FOOTER
 
 
-footer :: Bool -> [TMP.CanonicalModule] -> Text.Text
-footer debugMode rootModules =
+createFooter
+  :: Bool
+  -> Map.Map TMP.CanonicalModule Module.Interface
+  -> [TMP.CanonicalModule]
+  -> Text.Text
+createFooter debugMode canonicalInterfaces rootModules =
   let
+    interfaces =
+      Map.mapKeys TMP.simplifyModuleName canonicalInterfaces
+
     exportChunks =
-      map (export debugMode) (List.sort (map TMP.simplifyModuleName rootModules))
+      map
+        (exportProgram debugMode interfaces)
+        (List.sort (map TMP.simplifyModuleName rootModules))
   in
     Text.pack $
       "var Elm = {};\n"
@@ -162,8 +173,12 @@ footer debugMode rootModules =
       ++ footerClose
 
 
-export :: Bool -> Module.Canonical -> String
-export debugMode canonicalName@(Module.Canonical _ moduleName) =
+exportProgram
+  :: Bool
+  -> Map.Map Module.Canonical Module.Interface
+  -> Module.Canonical
+  -> String
+exportProgram debugMode interfaces canonicalName@(Module.Canonical _ moduleName) =
   let
     makeProgram =
       Module.qualifiedVar canonicalName "main"
@@ -175,13 +190,19 @@ export debugMode canonicalName@(Module.Canonical _ moduleName) =
       Module.nameToString moduleName
 
     debugArg =
-      if debugMode then
-        ", true"
-      else
-        ""
+      if debugMode then createDebugArg interfaces canonicalName else "undefined"
   in
     setup moduleName
-    ++ makeProgram ++ "(" ++ object ++ ", '" ++ name ++ "'" ++ debugArg ++ ");"
+    ++ makeProgram ++ "(" ++ object ++ ", '" ++ name ++ "', " ++ debugArg ++ ");"
+
+
+createDebugArg :: Map.Map Module.Canonical Module.Interface -> Module.Canonical -> String
+createDebugArg interfaces canonicalName =
+  Module.programTypes interfaces canonicalName
+    |> Json.encode
+    |> LazyText.decodeUtf8
+    |> LazyText.replace "\\u003e" ">"
+    |> LazyText.unpack
 
 
 setup :: [String] -> String
