@@ -22,6 +22,10 @@ import TheMasterPlan
     )
 
 
+
+-- ENVIRONMENT and STATE
+
+
 data Env =
   Env
     { numTasks :: Int
@@ -231,7 +235,9 @@ updateBlockedModules modul blockedModules potentiallyFreedModule =
               )
 
 
+
 -- UPDATE - BUILD SOME MODULES
+
 
 buildModule :: Env -> Interfaces -> (CanonicalModule, Location) -> IO ()
 buildModule env interfaces (modul, location) =
