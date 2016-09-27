@@ -3,6 +3,7 @@
 module Pipeline.Generate where
 
 import Control.Monad.Except (forM_, liftIO)
+import Data.Aeson ((.=))
 import qualified Data.Aeson as Json
 import qualified Data.Graph as Graph
 import qualified Data.List as List
@@ -16,8 +17,10 @@ import qualified Data.Text.Lazy.Encoding as LazyText
 import qualified Data.Text.Lazy.IO as LazyText
 import qualified Data.Tree as Tree
 import Elm.Utils ((|>))
+import qualified Elm.Compiler as Elm
 import qualified Elm.Compiler.Module as Module
 import qualified Elm.Docs as Docs
+import qualified Elm.Package as Pkg
 import System.Directory ( createDirectoryIfMissing )
 import System.FilePath ( dropFileName )
 import System.IO ( IOMode(WriteMode) )
@@ -34,7 +37,9 @@ import qualified TheMasterPlan as TMP
 import qualified Utils.File as File
 
 
+
 -- GENERATE DOCS
+
 
 docs :: [Docs.Documentation] -> FilePath -> BM.Task ()
 docs docsList path =
@@ -45,7 +50,9 @@ docs docsList path =
     |> liftIO
 
 
+
 -- GENERATE ELM STUFF
+
 
 generate
     :: BM.Config
@@ -61,7 +68,7 @@ generate _config _interfaces _dependencies _natives [] =
 generate config interfaces dependencies natives rootModules =
   do  let objectFiles =
             setupNodes (BM._artifactDirectory config) dependencies natives
-              |> getReachableObjectFiles rootModules
+              |> getReachableObjectFiles (BM._debug config) rootModules
 
       let outputFile = BM.outputFilePath config
       liftIO (createDirectoryIfMissing True (dropFileName outputFile))
@@ -108,24 +115,34 @@ setupNodes cachePath dependencies natives =
 
 
 getReachableObjectFiles
-    :: [TMP.CanonicalModule]
-    -> [(FilePath, TMP.CanonicalModule, [TMP.CanonicalModule])]
-    -> [FilePath]
-getReachableObjectFiles moduleNames nodes =
-    let (dependencyGraph, vertexToKey, keyToVertex) =
-            Graph.graphFromEdges nodes
+  :: Bool
+  -> [TMP.CanonicalModule]
+  -> [(FilePath, TMP.CanonicalModule, [TMP.CanonicalModule])]
+  -> [FilePath]
+getReachableObjectFiles debug moduleNames allNodes =
+  let
+    nodes =
+      if debug then allNodes else filter (not . isVirtualDomDebug) allNodes
 
-        reachableSet =
-            Maybe.mapMaybe keyToVertex moduleNames
-              |> Graph.dfs dependencyGraph
-              |> concatMap Tree.flatten
-              |> Set.fromList
-    in
-        Graph.topSort dependencyGraph
-          |> filter (\vtx -> Set.member vtx reachableSet)
-          |> reverse
-          |> map vertexToKey
-          |> map (\(path, _, _) -> path)
+    (dependencyGraph, vertexToKey, keyToVertex) =
+      Graph.graphFromEdges nodes
+
+    reachableSet =
+      Maybe.mapMaybe keyToVertex moduleNames
+        |> Graph.dfs dependencyGraph
+        |> concatMap Tree.flatten
+        |> Set.fromList
+  in
+    Graph.topSort dependencyGraph
+      |> filter (\vtx -> Set.member vtx reachableSet)
+      |> reverse
+      |> map vertexToKey
+      |> map (\(path, _, _) -> path)
+
+
+isVirtualDomDebug :: (fp, TMP.CanonicalModule, deps) -> Bool
+isVirtualDomDebug (_filePath, TMP.CanonicalModule (pkg, _vsn) name, _deps) =
+  pkg == Pkg.virtualDom && name == ["VirtualDom","Debug"]
 
 
 
@@ -147,6 +164,7 @@ html generatedJavaScript moduleName =
       H.body $ do
         H.script ! A.type_ "text/javascript" $
             Blaze.preEscapedToMarkup ("Elm." ++ Module.nameToString moduleName ++ ".fullscreen()")
+
 
 
 -- FOOTER
@@ -190,19 +208,25 @@ exportProgram debugMode interfaces canonicalName@(Module.Canonical _ moduleName)
       Module.nameToString moduleName
 
     debugArg =
-      if debugMode then createDebugArg interfaces canonicalName else "undefined"
+      if debugMode then createDebugMetadata interfaces canonicalName else "undefined"
   in
     setup moduleName
     ++ makeProgram ++ "(" ++ object ++ ", '" ++ name ++ "', " ++ debugArg ++ ");"
 
 
-createDebugArg :: Map.Map Module.Canonical Module.Interface -> Module.Canonical -> String
-createDebugArg interfaces canonicalName =
-  Module.programTypes interfaces canonicalName
-    |> Json.encode
-    |> LazyText.decodeUtf8
-    |> LazyText.replace "\\u003e" ">"
-    |> LazyText.unpack
+createDebugMetadata :: Map.Map Module.Canonical Module.Interface -> Module.Canonical -> String
+createDebugMetadata interfaces canonicalName =
+  let
+    metadataFields =
+      [ "versions" .= Json.object [ "elm" .= Elm.version ]
+      , "types" .= Module.programTypes interfaces canonicalName
+      ]
+  in
+    Json.object metadataFields
+      |> Json.encode
+      |> LazyText.decodeUtf8
+      |> LazyText.replace "\\u003e" ">"
+      |> LazyText.unpack
 
 
 setup :: [String] -> String
