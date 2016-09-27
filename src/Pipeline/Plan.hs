@@ -150,7 +150,7 @@ toBuildGraph
     :: InterfacedGraph
     -> BuildGraph
 toBuildGraph summary =
-    BuildGraph
+  BuildGraph
     { blockedModules = Map.map (toBuildData interfaces) locations
     , completedInterfaces = interfaces
     }
@@ -207,19 +207,21 @@ filterNativeDeps name =
 
 topologicalSort :: Map.Map CanonicalModule [CanonicalModule] -> BM.Task [CanonicalModule]
 topologicalSort dependencies =
-    mapM errorOnCycle components
-  where
-    components =
-        Graph.stronglyConnComp (map toNode (Map.toList dependencies))
-
+  let
     toNode (name, deps) =
-        (name, name, deps)
+      (name, name, deps)
 
-    errorOnCycle :: Graph.SCC CanonicalModule -> BM.Task CanonicalModule
-    errorOnCycle scc =
-        case scc of
-          Graph.AcyclicSCC name ->
-              return name
+    components =
+      Graph.stronglyConnComp (map toNode (Map.toList dependencies))
+  in
+    mapM errorOnCycle components
 
-          Graph.CyclicSCC cycle ->
-              throwError (BM.Cycle cycle)
+
+errorOnCycle :: Graph.SCC CanonicalModule -> BM.Task CanonicalModule
+errorOnCycle scc =
+  case scc of
+    Graph.AcyclicSCC name ->
+      return name
+
+    Graph.CyclicSCC cycle ->
+      throwError (BM.Cycle cycle)
