@@ -12,7 +12,9 @@ import qualified Elm.Compiler.Module as Module
 import qualified Elm.Package as Pkg
 
 
+
 -- UNIQUE IDENTIFIERS FOR MODULES
+
 
 data CanonicalModule = CanonicalModule
     { package :: Package
@@ -29,7 +31,9 @@ simplifyModuleName (CanonicalModule (pkg,_) name) =
 type Package = (Pkg.Name, Pkg.Version)
 
 
+
 -- CRAWL AN INDIVIDUAL PACKGE
+
 
 {-| Basic information about all modules that are part of a certain package.
 We obtain this information by doing a depth first search starting with a
@@ -54,7 +58,9 @@ data PackageData = PackageData
     }
 
 
+
 -- COMBINE ALL PACKAGE SUMMARIES
+
 
 {-| Very similar to a PackageGraph, but we now have made each module name
 unique by adding which package it comes from. This makes it safe to merge a
@@ -79,7 +85,9 @@ data Location = Location
     }
 
 
+
 -- BUILD-FRIENDLY SUMMARY
+
 
 {-| Combines the ProjectGraph with all cached build information. At this
 stage we crawl any cached interface files. File changes may have invalidated
@@ -108,7 +116,9 @@ data BuildData = BuildData
     }
 
 
+
 -- BINARY
+
 
 instance Binary CanonicalModule where
   get =
