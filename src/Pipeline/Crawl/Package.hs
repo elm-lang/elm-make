@@ -207,8 +207,8 @@ readPackageData
 readPackageData env maybeName filePath =
   do  sourceCode <- liftIO (File.readStringUtf8 filePath)
 
-      (tag, name, rawDeps) <-
-          case Compiler.parseDependencies sourceCode of
+      (tag, name, deps) <-
+          case Compiler.parseDependencies (_packageName env) sourceCode of
             Right result ->
                 return result
 
@@ -217,11 +217,6 @@ readPackageData env maybeName filePath =
 
       checkName filePath name maybeName
       checkTag filePath name (_permissions env) tag
-
-      let deps =
-            if _packageName env == Pkg.core
-              then rawDeps
-              else Module.defaultImports ++ rawDeps
 
       return
         ( name
