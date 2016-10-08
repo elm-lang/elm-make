@@ -198,7 +198,7 @@ exportProgram
   -> String
 exportProgram debugMode interfaces canonicalName@(Module.Canonical _ moduleName) =
   let
-    makeProgram =
+    program =
       Module.qualifiedVar canonicalName "main"
 
     object =
@@ -211,7 +211,8 @@ exportProgram debugMode interfaces canonicalName@(Module.Canonical _ moduleName)
       if debugMode then createDebugMetadata interfaces canonicalName else "undefined"
   in
     setup moduleName
-    ++ makeProgram ++ "(" ++ object ++ ", '" ++ name ++ "', " ++ debugArg ++ ");"
+    ++ "if (typeof " ++ program ++ " !== 'undefined') {\n    "
+    ++ program ++ "(" ++ object ++ ", '" ++ name ++ "', " ++ debugArg ++ ");\n}"
 
 
 createDebugMetadata :: Map.Map Module.Canonical Module.Interface -> Module.Canonical -> String
