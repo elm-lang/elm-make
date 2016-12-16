@@ -5,6 +5,7 @@ import Control.Monad.Except (ExceptT, runExceptT)
 import Control.Monad.State (StateT, liftIO, runStateT)
 import qualified Control.Monad.State as State
 import qualified Data.List as List
+import Data.Text (Text)
 import qualified Data.Time.Clock.POSIX as Time
 import qualified Elm.Compiler as Compiler
 import qualified Elm.Compiler.Module as Module
@@ -138,7 +139,7 @@ phaseToString overallDuration indent (Phase tag start subphases end) =
 
 
 data Error
-    = CompilerErrors FilePath String [Compiler.Error]
+    = CompilerErrors FilePath Text [Compiler.Error]
     | CorruptedArtifact FilePath
     | Cycle [TMP.CanonicalModule]
     | PackageProblem String

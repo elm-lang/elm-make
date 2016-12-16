@@ -4,6 +4,8 @@ import qualified Control.Concurrent.Chan as Chan
 import Control.Monad (when)
 import qualified Data.Aeson as Json
 import qualified Data.ByteString.Lazy.Char8 as BS
+import qualified Data.Text as Text
+import Data.Text (Text)
 import qualified Elm.Compiler as Compiler
 import qualified Elm.Package as Pkg
 import qualified Elm.Package.Paths as Path
@@ -20,8 +22,8 @@ data Type = Normal | Json
 
 data Message
     = Close
-    | Complete CanonicalModule Compiler.Localizer FilePath String [Compiler.Warning]
-    | Error CanonicalModule Compiler.Localizer FilePath String [Compiler.Warning] [Compiler.Error]
+    | Complete CanonicalModule Compiler.Localizer FilePath Text [Compiler.Warning]
+    | Error CanonicalModule Compiler.Localizer FilePath Text [Compiler.Warning] [Compiler.Error]
 
 
 
@@ -157,7 +159,7 @@ printSeparator isTerminal color header =
         when isTerminal $ hSetSGR stderr [Reset]
 
 
-printError :: Bool -> Compiler.Localizer -> FilePath -> String -> Compiler.Error -> IO ()
+printError :: Bool -> Compiler.Localizer -> FilePath -> Text -> Compiler.Error -> IO ()
 printError isTerminal localizer path source err =
   if isTerminal then
     Compiler.printError stderr localizer path source err
@@ -165,7 +167,7 @@ printError isTerminal localizer path source err =
     hPutStr stderr (Compiler.errorToString localizer path source err)
 
 
-printWarning :: Bool -> Compiler.Localizer -> FilePath -> String -> Compiler.Warning -> IO ()
+printWarning :: Bool -> Compiler.Localizer -> FilePath -> Text -> Compiler.Warning -> IO ()
 printWarning isTerminal localizer path source err =
   if isTerminal then
     Compiler.printWarning stderr localizer path source err

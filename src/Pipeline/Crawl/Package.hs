@@ -1,9 +1,11 @@
 {-# OPTIONS_GHC -Wall #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Pipeline.Crawl.Package where
 
 import Control.Arrow (second)
 import Control.Monad.Except (liftIO, throwError)
 import qualified Data.Map as Map
+import qualified Data.Text as Text
 import qualified Elm.Compiler as Compiler
 import qualified Elm.Compiler.Module as Module
 import qualified Elm.Package.Description as Desc
@@ -185,12 +187,10 @@ findHelp allowNatives locations moduleName (dir:srcDirs) =
     addJsPath locs =
       do  let jsPath = dir </> Module.nameToPath moduleName <.> "js"
           jsExists <-
-              case moduleName of
-                "Native" : _ ->
-                  liftIO (doesFileExist jsPath)
-
-                _ ->
-                  return False
+              if Text.isPrefixOf "Native." moduleName then
+                liftIO (doesFileExist jsPath)
+              else
+                return False
 
           return (consIf jsExists (JS jsPath) locs)
 
@@ -205,15 +205,15 @@ readPackageData
   -> FilePath
   -> BM.Task (Module.Raw, (PackageData, [Unvisited]))
 readPackageData env maybeName filePath =
-  do  sourceCode <- liftIO (File.readStringUtf8 filePath)
+  do  sourceCode <- liftIO (File.readTextUtf8 filePath)
 
       (tag, name, deps) <-
           case Compiler.parseDependencies (_packageName env) sourceCode of
             Right result ->
                 return result
 
-            Left msgs ->
-                throwError (BM.CompilerErrors filePath sourceCode msgs)
+            Left msg ->
+                throwError (BM.CompilerErrors filePath sourceCode [msg])
 
       checkName filePath name maybeName
       checkTag filePath name (_permissions env) tag

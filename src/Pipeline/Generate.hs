@@ -142,7 +142,7 @@ getReachableObjectFiles debug moduleNames allNodes =
 
 isVirtualDomDebug :: (fp, TMP.CanonicalModule, deps) -> Bool
 isVirtualDomDebug (_filePath, TMP.CanonicalModule (pkg, _vsn) name, _deps) =
-  pkg == Pkg.virtualDom && name == ["VirtualDom","Debug"]
+  pkg == Pkg.virtualDom && name == "VirtualDom.Debug"
 
 
 
@@ -196,16 +196,19 @@ exportProgram
   -> Map.Map Module.Canonical Module.Interface
   -> Module.Canonical
   -> String
-exportProgram debugMode interfaces canonicalName@(Module.Canonical _ moduleName) =
+exportProgram debugMode interfaces canonicalName@(Module.Canonical _ rawName) =
   let
     program =
-      Module.qualifiedVar canonicalName "main"
+      Text.unpack (Module.qualifiedVar canonicalName "main")
+
+    moduleName =
+      map Text.unpack (Text.splitOn "." rawName)
 
     object =
       objectFor moduleName
 
     name =
-      Module.nameToString moduleName
+      Module.nameToString rawName
 
     debugArg =
       if debugMode then createDebugMetadata interfaces canonicalName else "undefined"
@@ -246,7 +249,7 @@ setup moduleName =
     unlines (map create paths)
 
 
-objectFor :: Module.Raw -> String
+objectFor :: [String] -> String
 objectFor names =
   let
     brackets :: String -> String

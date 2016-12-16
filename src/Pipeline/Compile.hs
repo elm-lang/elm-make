@@ -6,6 +6,8 @@ import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import qualified Data.Set as Set
+import qualified Data.Text as Text
+import qualified Data.Text.IO as Text
 import qualified Data.Text.Lazy.IO as LazyTextIO
 import qualified Elm.Compiler as Compiler
 import qualified Elm.Compiler.Module as Module
@@ -253,7 +255,7 @@ buildModule env interfaces (modul, location) =
     context =
         Compiler.Context packageName isExposed deps
   in
-  do  source <- readFile path
+  do  source <- Text.readFile path
 
       let (localizer, warnings, rawResult) =
             Compiler.compile context source ifaces
@@ -264,8 +266,9 @@ buildModule env interfaces (modul, location) =
       Chan.writeChan (resultChan env) result
 
 
-data Result = Result
-    { _source :: String
+data Result =
+  Result
+    { _source :: Text.Text
     , _path :: FilePath
     , _moduleID :: CanonicalModule
     , _localizer :: Compiler.Localizer

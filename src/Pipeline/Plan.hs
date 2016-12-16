@@ -1,9 +1,11 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Pipeline.Plan where
 
 import Control.Monad (foldM)
 import Control.Monad.Except (liftIO, throwError)
 import qualified Data.Graph as Graph
 import qualified Data.Set as Set
+import qualified Data.Text as Text
 import Data.Time.Clock (UTCTime)
 import Data.Map ((!))
 import qualified Data.Map as Map
@@ -81,7 +83,7 @@ getFreshInterfaceInfo sourcePath interfacePath =
 
 isMain :: CanonicalModule -> Bool
 isMain (CanonicalModule _ names) =
-  names == ["Main"]
+  names == "Main"
 
 
 
@@ -192,13 +194,12 @@ filterCachedDeps interfaces name =
 
 
 filterNativeDeps :: CanonicalModule -> Maybe CanonicalModule
-filterNativeDeps name =
-    case name of
-      CanonicalModule _pkg ("Native" : _) ->
-          Nothing
+filterNativeDeps moduleName@(CanonicalModule _ name) =
+    if Text.isPrefixOf "Native." name then
+      Nothing
 
-      _ ->
-          Just name
+    else
+      Just moduleName
 
 
 
